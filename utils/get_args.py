@@ -50,7 +50,6 @@ def get_args():
     )
     parser.add_argument("--gamma", type=float, default=0.99, help="Base learning rate.")
 
-    # === PPO PARAMETER === #
     parser.add_argument("--K-epochs", type=int, default=5, help="")
     parser.add_argument(
         "--target-kl",
@@ -70,6 +69,14 @@ def get_args():
     parser.add_argument(
         "--eps-clip", type=float, default=0.2, help="Base learning rate."
     )
+    parser.add_argument(
+        "--buffer-size", type=int, default=200_000, help="Base learning rate."
+    )
+    parser.add_argument("--tau", type=float, default=0.005, help="Base learning rate.")
+    parser.add_argument(
+        "--policy-freq", type=int, default=2, help="Base learning rate."
+    )
+
     # === HRL PARAMETER === #
     parser.add_argument(
         "--num-options", type=int, default=None, help="Number of samples for training."

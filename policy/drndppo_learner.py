@@ -156,8 +156,6 @@ class DRNDPPO_Learner(Base):
         ext_rewards = self.preprocess_state(batch["rewards"])
         int_rewards = self.intrinsic_reward(next_states)
 
-        self.record_state_visitations(states)
-
         # Compute advantages and returns
         with torch.no_grad():
             ext_values = self.critic(states)
@@ -265,10 +263,6 @@ class DRNDPPO_Learner(Base):
                 break
 
         self.lr_scheduler.step()
-        if self.nupdates is not None:
-            self.int_reward_scaler = 1 - np.clip(
-                2 * (self.lr_scheduler.last_epoch / self.nupdates), 0.0, 1.0
-            )
 
         # Logging
         loss_dict = {

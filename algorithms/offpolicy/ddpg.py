@@ -26,7 +26,7 @@ class DDPG_Algorithm(nn.Module):
         replay_buffer = ReplayBuffer(
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
-            buffer_size=200_000,
+            buffer_size=self.args.buffer_size,
             batch_size=self.args.batch_size,
             device=self.args.device,
         )
@@ -52,6 +52,7 @@ class DDPG_Algorithm(nn.Module):
                 self.args.action_dim,
                 hidden_dim=self.args.critic_fc_dim,
             )
+            # actor is a wrapper that chooses over critic
             actor = TD3_Actor_From_Critic(critic)
         else:
             action_scale = (self.env.action_space.low, self.env.action_space.high)
@@ -74,7 +75,9 @@ class DDPG_Algorithm(nn.Module):
             nupdates=self.args.nupdates,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
+            policy_freq=self.args.policy_freq,
             gamma=self.args.gamma,
+            tau=self.args.tau,
             is_discrete=self.args.is_discrete,
             device=self.args.device,
         )

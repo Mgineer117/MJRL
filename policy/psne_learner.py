@@ -120,8 +120,6 @@ class PSNE_Learner(Base):
         terminals = self.preprocess_state(batch["terminals"])
         old_logprobs = self.preprocess_state(batch["logprobs"])
 
-        self.record_state_visitations(states)
-
         # Compute advantages and returns
         with torch.no_grad():
             values = self.critic(states)

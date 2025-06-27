@@ -44,9 +44,8 @@ class DDPG_Learner(Base):
         self.is_discrete = is_discrete
 
         if self.is_discrete:
-            # actor share the same memory
-            # since actor is not trainable
-            # but relies on the critic1
+            # actor share the same memory with critic
+            # since actor is not trainable but relies on the critic1
             self.actor = actor
             self.actor_target = actor
 
@@ -133,7 +132,6 @@ class DDPG_Learner(Base):
 
         ### === PREPARE SAMPLES === ###
         states, actions, next_states, rewards, terminals = replay_buffer.sample()
-        self.record_state_visitations(states)
 
         ### === CRITIC UPDATE === ###
         critic_loss, td_error = self.critic_loss(
@@ -196,7 +194,6 @@ class DDPG_Learner(Base):
 
         ### === PREPARE SAMPLES === ###
         states, actions, next_states, rewards, terminals = replay_buffer.sample()
-        self.record_state_visitations(states)
 
         ### === CRITIC UPDATE === ###
         critic_loss, td_error = self.critic_loss(
