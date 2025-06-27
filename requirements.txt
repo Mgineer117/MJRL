@@ -1,0 +1,16 @@
+gymnasium
+gymnasium[box2d]
+mujoco
+imageio
+matplotlib
+moviepy
+numpy
+pandas
+sympy
+tensorboard
+torch
+tqdm
+wandb
+scipy
+pyrender
+scikit-learn
