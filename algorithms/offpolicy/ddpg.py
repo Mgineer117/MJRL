@@ -17,8 +17,6 @@ class DDPG_Algorithm(nn.Module):
         self.writer = writer
         self.args = args
 
-        self.args.nupdates = args.timesteps // args.batch_size
-
     def begin_training(self):
         # === Define policy === #
         self.define_policy()
@@ -36,11 +34,7 @@ class DDPG_Algorithm(nn.Module):
             replay_buffer=replay_buffer,
             logger=self.logger,
             writer=self.writer,
-            timesteps=self.args.timesteps,
-            log_interval=self.args.log_interval,
-            eval_num=self.args.eval_num,
-            rendering=self.args.rendering,
-            seed=self.args.seed,
+            args=self.args,
         )
 
         trainer.train()
@@ -61,6 +55,7 @@ class DDPG_Algorithm(nn.Module):
                 hidden_dim=self.args.actor_fc_dim,
                 action_dim=self.args.action_dim,
                 action_scale=action_scale,
+                action_noise_coeff=self.args.action_noise_coeff,
                 device=self.args.device,
             )
             critic = TD3_Critic(

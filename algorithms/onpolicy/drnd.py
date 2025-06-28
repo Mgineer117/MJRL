@@ -8,19 +8,15 @@ from trainer.onpolicy_trainer import OnPolicyTrainer
 from utils.sampler import OnlineSampler
 
 
-class DRND_PPO_Algorithm(nn.Module):
+class DRND_Algorithm(nn.Module):
     def __init__(self, env, logger, writer, args):
-        super(DRND_PPO_Algorithm, self).__init__()
+        super(DRND_Algorithm, self).__init__()
 
         # === Parameter saving === #
         self.env = env
         self.logger = logger
         self.writer = writer
         self.args = args
-
-        self.args.nupdates = args.timesteps // (
-            args.minibatch_size * args.num_minibatch
-        )
 
     def begin_training(self):
         # === Define policy === #
@@ -30,7 +26,7 @@ class DRND_PPO_Algorithm(nn.Module):
         sampler = OnlineSampler(
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
-            episode_len=self.env.max_steps,
+            episode_len=self.args.episode_len,
             batch_size=int(self.args.minibatch_size * self.args.num_minibatch),
         )
 
@@ -40,11 +36,7 @@ class DRND_PPO_Algorithm(nn.Module):
             sampler=sampler,
             logger=self.logger,
             writer=self.writer,
-            timesteps=self.args.timesteps,
-            log_interval=self.args.log_interval,
-            eval_num=self.args.eval_num,
-            rendering=self.args.rendering,
-            seed=self.args.seed,
+            args=self.args,
         )
 
         trainer.train()
@@ -62,13 +54,10 @@ class DRND_PPO_Algorithm(nn.Module):
         )
         critic = PPO_Critic(self.args.state_dim, hidden_dim=self.args.critic_fc_dim)
 
-        feature_dim = (
-            self.args.feature_dim if self.args.feature_dim else self.args.state_dim
-        )
         drnd_model = DRNDModel(
-            input_dim=len(self.args.positional_indices),
-            output_dim=feature_dim,
-            num=10,
+            input_dim=self.args.state_dim,
+            output_dim=self.args.state_dim,
+            num=10,  # by original paper
             device=self.args.device,
         )
         drnd_critic = PPO_Critic(
@@ -80,7 +69,6 @@ class DRND_PPO_Algorithm(nn.Module):
             critic=critic,
             drnd_model=drnd_model,
             drnd_critic=drnd_critic,
-            positional_indices=self.args.positional_indices,
             nupdates=self.args.nupdates,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,

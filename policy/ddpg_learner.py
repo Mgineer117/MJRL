@@ -61,10 +61,6 @@ class DDPG_Learner(Base):
                     {"params": self.critic2.parameters(), "lr": critic_lr},
                 ]
             )
-            self.critic_lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
-                self.critic_optimizer, lr_lambda=self.lr_lambda
-            )
-
         else:
             self.actor = actor
             self.actor_target = deepcopy(actor)
@@ -84,15 +80,6 @@ class DDPG_Learner(Base):
                     {"params": self.critic2.parameters(), "lr": critic_lr},
                 ]
             )
-
-            # Define schedulers
-            self.actor_lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
-                self.actor_optimizer, lr_lambda=self.lr_lambda
-            )
-            self.critic_lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
-                self.critic_optimizer, lr_lambda=self.lr_lambda
-            )
-
         #
         self.steps = 0
         self.to(self.dtype).to(self.device)
@@ -159,7 +146,6 @@ class DDPG_Learner(Base):
             device=self.device,
         )
         self.critic_optimizer.step()
-        self.critic_lr_scheduler.step()
 
         self.steps += 1
 
@@ -171,9 +157,6 @@ class DDPG_Learner(Base):
         loss_dict[f"{self.name}/critic_loss"] = critic_loss.item()
         loss_dict[f"{self.name}/td_error"] = td_error.item()
         loss_dict[f"{self.name}/analytics/avg_rewards"] = torch.mean(rewards).item()
-        loss_dict[f"{self.name}/analytics/critic_lr"] = (
-            self.critic_optimizer.param_groups[1]["lr"]
-        )
         loss_dict.update(critic_grad_dict)
         loss_dict.update(critic_norm_dict)
 
@@ -221,7 +204,6 @@ class DDPG_Learner(Base):
             device=self.device,
         )
         self.critic_optimizer.step()
-        self.critic_lr_scheduler.step()
 
         ### === LOGGING === ###
         loss_dict[f"{self.name}/critic_loss"] = critic_loss.item()
@@ -249,7 +231,6 @@ class DDPG_Learner(Base):
                 device=self.device,
             )
             self.actor_optimizer.step()
-            self.actor_lr_scheduler.step()
 
             loss_dict[f"{self.name}/actor_loss"] = actor_loss.item()
             loss_dict.update(actor_grad_dict)
@@ -264,12 +245,6 @@ class DDPG_Learner(Base):
 
         # Logging
         loss_dict[f"{self.name}/analytics/avg_rewards"] = torch.mean(rewards).item()
-        loss_dict[f"{self.name}/analytics/actor_lr"] = (
-            self.actor_optimizer.param_groups[0]["lr"]
-        )
-        loss_dict[f"{self.name}/analytics/critic_lr"] = (
-            self.critic_optimizer.param_groups[1]["lr"]
-        )
 
         # Cleanup
         del states, actions, next_states, rewards, terminals

@@ -17,8 +17,6 @@ class PSNE_Algorithm(nn.Module):
         self.writer = writer
         self.args = args
 
-        self.args.nupdates = args.timesteps // args.batch_size
-
     def begin_training(self):
         # === Define policy === #
         self.define_policy()
@@ -27,7 +25,7 @@ class PSNE_Algorithm(nn.Module):
         sampler = OnlineSampler(
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
-            episode_len=self.env.max_steps,
+            episode_len=self.args.episode_len,
             batch_size=self.args.batch_size,
         )
 
@@ -37,11 +35,7 @@ class PSNE_Algorithm(nn.Module):
             sampler=sampler,
             logger=self.logger,
             writer=self.writer,
-            timesteps=self.args.timesteps,
-            log_interval=self.args.log_interval,
-            eval_num=self.args.eval_num,
-            rendering=self.args.rendering,
-            seed=self.args.seed,
+            args=self.args,
         )
 
         trainer.train()
@@ -58,7 +52,7 @@ class PSNE_Algorithm(nn.Module):
         sampler = OnlineSampler(
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
-            episode_len=self.env.max_steps,
+            episode_len=self.args.episode_len,
             batch_size=self.args.batch_size,
             verbose=False,
         )

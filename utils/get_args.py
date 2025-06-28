@@ -1,4 +1,5 @@
 import argparse
+import uuid
 
 import torch
 
@@ -8,7 +9,7 @@ def get_args():
 
     # === ENV PARAMETER === #
     parser.add_argument(
-        "--env-name", type=str, default="LunarLander-v3", help="Name of the model."
+        "--env-name", type=str, default="Ant-v5", help="Name of the model."
     )
     parser.add_argument("--algo-name", type=str, default="ppo", help="Disable cuda.")
     parser.add_argument("--seed", type=int, default=42, help="Batch size.")
@@ -72,6 +73,12 @@ def get_args():
     parser.add_argument(
         "--buffer-size", type=int, default=200_000, help="Base learning rate."
     )
+    parser.add_argument(
+        "--warmup-samples", type=int, default=1_000, help="Base learning rate."
+    )
+    parser.add_argument(
+        "--action-noise-coeff", type=float, default=0.1, help="Base learning rate."
+    )
     parser.add_argument("--tau", type=float, default=0.005, help="Base learning rate.")
     parser.add_argument(
         "--policy-freq", type=int, default=2, help="Base learning rate."
@@ -88,18 +95,6 @@ def get_args():
     )
     parser.add_argument(
         "--logdir", type=str, default="log/train_log", help="name of the logging folder"
-    )
-    parser.add_argument(
-        "--group",
-        type=str,
-        default=None,
-        help="Global folder name for experiments with multiple seed tests.",
-    )
-    parser.add_argument(
-        "--name",
-        type=str,
-        default=None,
-        help='Seed-specific folder name in the "group" folder.',
     )
     parser.add_argument(
         "--log-interval", type=int, default=200, help="Number of training epochs."
@@ -125,6 +120,9 @@ def get_args():
 
     args = parser.parse_args()
     args.device = select_device(args.gpu_idx)
+
+    unique_id = str(uuid.uuid4())[:4]
+    args.unique_id = unique_id
 
     return args
 

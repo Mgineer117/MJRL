@@ -17,9 +17,9 @@ class ReplayBuffer:
         self.ptr = 0
         self.size = 0
 
-        self.state = np.zeros((buffer_size,) + state_dim, dtype=np.float32)
+        self.state = np.zeros((buffer_size, state_dim), dtype=np.float32)
         self.action = np.zeros((buffer_size, action_dim), dtype=np.float32)
-        self.next_state = np.zeros((buffer_size,) + state_dim, dtype=np.float32)
+        self.next_state = np.zeros((buffer_size, state_dim), dtype=np.float32)
         self.reward = np.zeros((buffer_size, 1), dtype=np.float32)
         self.terminal = np.zeros((buffer_size, 1), dtype=np.float32)
 

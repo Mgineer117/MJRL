@@ -15,6 +15,7 @@ class TD3_Actor(Base):
         hidden_dim: list,
         action_dim: int,
         action_scale: tuple,
+        action_noise_coeff: float,
         activation: nn.Module = nn.ReLU(),
         device=torch.device("cpu"),
     ):
@@ -24,19 +25,13 @@ class TD3_Actor(Base):
         self.hidden_dim = hidden_dim
         self.action_dim = np.prod(action_dim)
 
-        self.low_action_scale = torch.from_numpy(action_scale[0]).to(self.device)
-        self.high_action_scale = torch.from_numpy(action_scale[1]).to(self.device)
-
+        self.action_scale = [torch.from_numpy(x).to(device) for x in action_scale]
         self.action_max = torch.max(
-            torch.stack(
-                [
-                    torch.abs(self.low_action_scale).max(),
-                    torch.abs(self.high_action_scale).max(),
-                ]
-            )
+            torch.abs(self.action_scale[0]), torch.abs(self.action_scale[1])
         )
 
         self.is_discrete = False
+        self.action_noise_coeff = action_noise_coeff
 
         self.model = MLP(
             self.state_dim,
@@ -61,12 +56,13 @@ class TD3_Actor(Base):
         if not deterministic:
             # Add small exploration noise for action selection (not training!)
             mean = torch.zeros(action.size()).to(self.device)
-            var = 0.1 * torch.ones(action.size()).to(self.device)
+            var = self.action_noise_coeff * torch.ones(action.size()).to(self.device)
             noise = torch.normal(mean, var)
             action += noise
 
-        action = torch.min(action, self.high_action_scale)
-        action = torch.max(action, self.low_action_scale)
+        action = torch.max(
+            torch.min(action, self.action_scale[1]), self.action_scale[0]
+        )
 
         return action, {
             "dist": self._dummy,

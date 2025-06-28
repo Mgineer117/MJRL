@@ -11,11 +11,12 @@ from tqdm import tqdm
 
 from log.wandb_logger import WandbLogger
 from policy.layers.base import Base
+from trainer.base_trainer import BaseTrainer
 from utils.sampler import OnlineSampler
 
 
 # model-free policy trainer
-class OnPolicyTrainer:
+class OnPolicyTrainer(BaseTrainer):
     def __init__(
         self,
         env: gym.Env,
@@ -23,7 +24,6 @@ class OnPolicyTrainer:
         sampler: OnlineSampler,
         logger: WandbLogger,
         writer: SummaryWriter,
-        init_timesteps: int,
         args,
     ) -> None:
         self.env = env
@@ -36,7 +36,6 @@ class OnPolicyTrainer:
 
         # training parameters
         self.episode_len = args.episode_len
-        self.init_timesteps = init_timesteps
         self.timesteps = args.timesteps
 
         self.log_interval = args.log_interval
@@ -58,11 +57,10 @@ class OnPolicyTrainer:
         # Train loop
         eval_idx = 0
         with tqdm(
-            total=self.timesteps + self.init_timesteps,
-            initial=self.init_timesteps,
+            total=self.timesteps,
             desc=f"{self.policy.name} Training (Timesteps)",
         ) as pbar:
-            while pbar.n < self.timesteps + self.init_timesteps:
+            while pbar.n < self.timesteps:
                 step = pbar.n + 1  # + 1 to avoid zero division
                 self.policy.train()
 
@@ -171,43 +169,6 @@ class OnPolicyTrainer:
 
         return eval_dict, image_array
 
-    def average_discounted_return(self, rewards, terminals, gamma):
-        episode_returns = []
-        G = 0.0
-        for r, done in zip(rewards, terminals):
-            G = r + gamma * G
-            if done:
-                episode_returns.append(G)
-                G = 0.0  # Reset for next episode
-
-        if not episode_returns:
-            return 0.0
-        return sum(episode_returns) / len(episode_returns)
-
-    def discounted_return(self, rewards, gamma):
-        G = 0
-        for r in reversed(rewards):
-            G = r + gamma * G
-        return G
-
-    def write_log(self, logging_dict: dict, step: int, eval_log: bool = False):
-        # Logging to WandB and Tensorboard
-        self.logger.store(**logging_dict)
-        self.logger.write(step, eval_log=eval_log, display=False)
-        for key, value in logging_dict.items():
-            self.writer.add_scalar(key, value, step)
-
-    def write_image(self, image: np.ndarray, step: int, logdir: str, name: str):
-        image_list = [image]
-        image_path = os.path.join(logdir, name)
-        self.logger.write_images(step=step, images=image_list, logdir=image_path)
-
-    def write_video(self, image: list, step: int, logdir: str, name: str):
-        if len(image) > 0:
-            tensor = np.stack(image, axis=0)
-            video_path = os.path.join(logdir, name)
-            self.logger.write_videos(step=step, images=tensor, logdir=video_path)
-
     def save_model(self, e):
         ### save checkpoint
         name = f"model_{e}.pth"
@@ -232,28 +193,3 @@ class OnPolicyTrainer:
                 self.last_min_return_std = np.mean(self.last_return_std)
         else:
             raise ValueError("Error: Model is not identifiable!!!")
-
-    def visitation_to_rgb(self, visitation_map: np.ndarray) -> np.ndarray:
-        visitation_map = np.squeeze(visitation_map)  # Make sure it's 2D
-        H, W = visitation_map.shape
-
-        rgb_map = np.ones((H, W, 3), dtype=np.float32)  # Start with white
-
-        # Zero visitation → gray
-        zero_mask = visitation_map == 0
-        rgb_map[zero_mask] = [0.5, 0.5, 0.5]
-
-        # Nonzero visitation → white → blue gradient
-        nonzero_mask = visitation_map > 0
-        blue_intensity = visitation_map[nonzero_mask]
-
-        rgb_map[nonzero_mask] = np.stack(
-            [
-                1.0 - blue_intensity,  # Red
-                1.0 - blue_intensity,  # Green
-                np.ones_like(blue_intensity),  # Blue
-            ],
-            axis=-1,
-        )
-
-        return rgb_map

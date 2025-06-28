@@ -12,14 +12,22 @@ def call_env(args, verbose=True):
 
     env = gym.make(args.env_name, render_mode="rgb_array")
 
+    # === SAVING THE ENVIRONMENTAL SPEC === #
     args.state_dim = env.observation_space.shape[0]
     args.is_discrete = isinstance(env.action_space, gym.spaces.Discrete)
     args.action_dim = (
         env.action_space.n if args.is_discrete else env.action_space.shape[0]
     )
     args.episode_len = env.spec.max_episode_steps
-    args.batch_size = 20 * args.episode_len
+
+    # === DECIDE THE PROPER BATCH SIZE BASED ON THE EPISODE LENGTH === #
+    if args.is_discrete:
+        args.batch_size = 20 * args.episode_len
+    else:
+        args.batch_size = 30 * args.episode_len
     args.minibatch_size = args.batch_size // args.num_minibatch
+
+    # === COMPUTE THE TOTAL NUMBER OF EPOCHS FOR LR SCHEDULER === #
     args.nupdates = args.timesteps // args.batch_size
 
     if args.is_discrete:

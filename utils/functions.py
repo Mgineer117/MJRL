@@ -9,23 +9,16 @@ from torch.utils.tensorboard import SummaryWriter
 from log.wandb_logger import WandbLogger
 
 
-def setup_logger(args, unique_id, exp_time, seed):
+def setup_logger(args, exp_time, seed):
     """
     setup logger both using WandB and Tensorboard
     Return: WandB logger, Tensorboard logger
     """
     # Get the current date and time
-    if args.group is None:
-        args.group = "-".join((exp_time, unique_id))
-
-    if args.name is None:
-        args.name = "-".join(
-            (args.algo_name, args.env_name, unique_id, "seed:" + str(seed))
-        )
-
-    if args.project is None:
-        args.project = args.task
-
+    args.group = "-".join((exp_time, args.unique_id))
+    args.name = "-".join(
+        (args.algo_name, args.env_name, args.unique_id, "seed:" + str(seed))
+    )
     args.logdir = os.path.join(args.logdir, args.group)
 
     default_cfg = vars(args)
@@ -64,21 +57,6 @@ def seed_all(seed=0):
     # Ensure reproducibility of PyTorch operations
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-
-def temp_seed(seed, pid):
-    """
-    This saves current seed info and calls after stochastic action selection.
-    -------------------------------------------------------------------------
-    This is to introduce the stochacity in each multiprocessor.
-    Without this, the samples from each multiprocessor will be same since the seed was fixed
-    """
-    rand_int = random.randint(0, 1_000_000)  # create a random integer
-
-    # Set the temporary seed
-    torch.manual_seed(seed + pid + rand_int)
-    np.random.seed(seed + pid + rand_int)
-    random.seed(seed + pid + rand_int)
 
 
 def concat_csv_columnwise_and_delete(folder_path, output_file="output.csv"):

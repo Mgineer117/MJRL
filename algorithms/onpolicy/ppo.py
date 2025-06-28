@@ -35,7 +35,6 @@ class PPO_Algorithm(nn.Module):
             sampler=sampler,
             logger=self.logger,
             writer=self.writer,
-            init_timesteps=0,
             args=self.args,
         )
 
