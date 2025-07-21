@@ -1,6 +1,6 @@
 # algorithms/__init__.py
 
-from .hrl import HRL
+from .hrl.hrl import HRL
 from .offpolicy.ddpg import DDPG_Algorithm
 from .onpolicy.drnd import DRND_Algorithm
 from .onpolicy.ppo import PPO_Algorithm

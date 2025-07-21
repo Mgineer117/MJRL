@@ -5,12 +5,18 @@ import torch.nn as nn
 from utils.wrapper import GridWrapper, ObsNormWrapper
 
 
-def call_env(args, verbose=True):
+def call_env(args, verbose=True, spawn_agent_random: bool = False):
     """
     Call the environment based on the given name.
     """
-
-    env = gym.make(args.env_name, render_mode="rgb_array")
+    if args.env_name in ("Fourrooms-v0", "CtF-v0"):
+        env = gym.make(
+            args.env_name,
+            render_mode="rgb_array",
+            spawn_agent_random=spawn_agent_random,
+        )
+    else:
+        env = gym.make(args.env_name, render_mode="rgb_array")
 
     # === SAVING THE ENVIRONMENTAL SPEC === #
     args.state_dim = env.observation_space.shape[0]
@@ -34,7 +40,10 @@ def call_env(args, verbose=True):
         # it argmax the onehot
         env = GridWrapper(env)
 
-    env = ObsNormWrapper(env)
+    if spawn_agent_random:
+        # this makes initial agent position random
+        # currently not implemented
+        pass
 
     if verbose:
         print("────────────────────────────")

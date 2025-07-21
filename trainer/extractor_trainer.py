@@ -19,20 +19,14 @@ from utils.sampler import OnlineSampler
 class ExtractorTrainer:
     def __init__(
         self,
-        env: gym.Env,
-        random_policy: Base,
         extractor: Base,
-        sampler: OnlineSampler,
         logger: WandbLogger,
         writer: SummaryWriter,
         epochs: int = 1e6,
         batch_size: int = 1024,
         seed: int = 0,
     ) -> None:
-        self.env = env
-        self.policy = random_policy
         self.extractor = extractor
-        self.sampler = sampler
 
         self.logger = logger
         self.writer = writer
@@ -46,21 +40,10 @@ class ExtractorTrainer:
 
         self.seed = seed
 
-    def train(self) -> dict[str, float]:
+    def train(self, batch) -> dict[str, float]:
         start_time = time.time()
 
         self.loss_list = deque(maxlen=5)
-
-        # Collect initial data
-        batch, _ = self.sampler.collect_samples(
-            env=self.env, policy=self.policy, seed=self.seed, random_init_pos=True
-        )
-
-        states = batch["states"]
-        actions = batch["actions"]
-        next_states = batch["next_states"]
-
-        num_samples = states.shape[0]
 
         # Train loop
         step = 0
@@ -72,15 +55,7 @@ class ExtractorTrainer:
             while pbar.n < self.epochs:
                 step = pbar.n + 1  # + 1 to avoid zero division
 
-                indices = torch.randperm(num_samples)[: self.batch_size]
-
-                mb_states = states[indices]
-                mb_actions = actions[indices]
-                mb_next_states = next_states[indices]
-
-                loss_dict, timesteps, comparing_img, update_time = self.extractor.learn(
-                    mb_states, mb_actions, mb_next_states
-                )
+                loss_dict, _, fig, update_time = self.extractor.learn(batch)
 
                 # Calculate expected remaining time
                 pbar.update(1)
@@ -101,7 +76,7 @@ class ExtractorTrainer:
                 #### EVALUATIONS ####
                 if step > eval_idx * int(self.epochs / 10):
                     self.write_image(
-                        image=comparing_img,
+                        image=fig,
                         step=step,
                         logdir="Image",
                         name="Reconstruction",

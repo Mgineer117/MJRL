@@ -24,7 +24,7 @@ def get_args():
     parser.add_argument(
         "--extractor-epochs",
         type=int,
-        default=50000,
+        default=200000,
         help="Number of training epochs.",
     )
     parser.add_argument("--num-minibatch", type=int, default=4, help="")
@@ -38,7 +38,7 @@ def get_args():
         "--actor-fc-dim", type=list, default=[256, 256], help="Base learning rate."
     )
     parser.add_argument(
-        "--critic-fc-dim", type=list, default=[256, 256], help="Base learning rate."
+        "--critic-fc-dim", type=list, default=[512, 512], help="Base learning rate."
     )
     parser.add_argument(
         "--extractor-lr", type=float, default=1e-3, help="Base learning rate."
@@ -47,7 +47,7 @@ def get_args():
         "--actor-lr", type=float, default=1e-4, help="Base learning rate."
     )
     parser.add_argument(
-        "--critic-lr", type=float, default=1e-4, help="Base learning rate."
+        "--critic-lr", type=float, default=3e-4, help="Base learning rate."
     )
     parser.add_argument("--gamma", type=float, default=0.99, help="Base learning rate.")
 
@@ -55,7 +55,7 @@ def get_args():
     parser.add_argument(
         "--target-kl",
         type=float,
-        default=0.03,
+        default=0.01,
         help="Upper bound of the eigenvalue of the dual metric.",
     )
     parser.add_argument(
@@ -86,7 +86,28 @@ def get_args():
 
     # === HRL PARAMETER === #
     parser.add_argument(
-        "--num-options", type=int, default=None, help="Number of samples for training."
+        "--feature-dim", type=int, default=20, help="Number of samples for training."
+    )
+    parser.add_argument(
+        "--option-method",
+        type=str,
+        default="top",
+        help="Number of samples for training.",
+    )
+    parser.add_argument(
+        "--num-options", type=int, default=8, help="Number of samples for training."
+    )
+    parser.add_argument(
+        "--max-option-duration",
+        type=int,
+        default=6,
+        help="Number of samples for training.",
+    )
+    parser.add_argument(
+        "--discount-sampling-factor",
+        type=float,
+        default=0.9,
+        help="Number of samples for training.",
     )
 
     # === LOGGING PARAMETER === #

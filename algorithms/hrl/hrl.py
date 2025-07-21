@@ -23,16 +23,11 @@ class HRL(nn.Module):
         self.writer = writer
         self.args = args
 
-        if self.args.intrinsic_reward_mode in ("eigenpurpose", "allo"):
-            self.intrinsic_reward_fn = IntrinsicRewardFunctions(
-                logger=logger,
-                writer=writer,
-                args=args,
-            )
-        else:
-            raise ValueError(
-                f"The intrinsic reward mode { self.args.intrinsic_reward_mode} not suitable for HRL."
-            )
+        self.intrinsic_reward_fn = IntrinsicRewardFunctions(
+            logger=logger,
+            writer=writer,
+            args=args,
+        )
 
         self.args.nupdates = args.timesteps // (
             args.minibatch_size * args.num_minibatch
@@ -50,9 +45,9 @@ class HRL(nn.Module):
         hl_sampler = HLSampler(
             state_dim=self.args.state_dim,
             action_dim=int(self.args.num_options + 1),
-            episode_len=self.env.max_steps,
+            episode_len=self.args.episode_len,
             batch_size=int(self.args.minibatch_size * self.args.num_minibatch),
-            max_option_len=10,
+            max_option_len=self.args.max_option_duration,
             gamma=self.args.gamma,
             verbose=False,
         )
@@ -60,7 +55,7 @@ class HRL(nn.Module):
         sampler = OnlineSampler(
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
-            episode_len=self.env.max_steps,
+            episode_len=self.args.episode_len,
             batch_size=int(self.args.minibatch_size * self.args.num_minibatch),
             verbose=False,
         )

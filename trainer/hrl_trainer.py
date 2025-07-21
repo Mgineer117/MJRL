@@ -17,6 +17,7 @@ from policy.layers.base import Base
 from policy.uniform_random import UniformRandom
 from utils.rl import estimate_advantages
 from utils.sampler import OnlineSampler
+from trainer.base_trainer import BaseTrainer
 
 
 def compare_weights(policy1, policy2):
@@ -31,7 +32,7 @@ def compare_weights(policy1, policy2):
 
 
 # model-free policy trainer
-class HRLTrainer:
+class HRLTrainer(BaseTrainer):
     def __init__(
         self,
         env: gym.Env,
@@ -113,11 +114,10 @@ class HRLTrainer:
                     )
 
                     states, next_states = batch["states"], batch["next_states"]
-                    policy.record_state_visitations(states)
                     states = torch.from_numpy(states).to(policy.device)
                     next_states = torch.from_numpy(next_states).to(policy.device)
 
-                    intrinsic_rewards, _ = self.intrinsic_reward_fn(
+                    intrinsic_rewards = self.intrinsic_reward_fn(
                         states, next_states, option_idx
                     )
                     batch["rewards"] = intrinsic_rewards.cpu().numpy()
@@ -149,6 +149,11 @@ class HRLTrainer:
                     ] = (
                         remaining_time / 3600
                     )  # Convert to hours
+                    loss_dict[f"{self.policy.name}/analytics/discounted_return"] = (
+                        self.average_discounted_return(
+                            batch["rewards"], batch["terminals"], self.hl_policy.gamma
+                        )
+                    )
 
                     self.write_log(loss_dict, step=current_step)
 
