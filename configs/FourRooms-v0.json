@@ -1,4 +1,5 @@
 {
     "hl_timesteps": 2e6,
-    "timesteps": 1e6
+    "timesteps": 1e6,
+    "state_mask": [0, 1]
 }

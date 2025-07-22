@@ -106,7 +106,7 @@ class HRL(nn.Module):
             policy.name = "HRL_options"
             self.policies.append(policy)
 
-        if not self.args.is_discrete:
+        if self.args.fine_grained_option is None and not self.args.is_discrete:
             uniform_random_policy = UniformRandom(
                 state_dim=self.args.state_dim,
                 action_dim=self.args.action_dim,
@@ -115,6 +115,10 @@ class HRL(nn.Module):
             )
 
             self.policies.append(uniform_random_policy)
+            print(
+                "[INFO] Fine-grained options added:",
+                self.policies[-1],
+            )
         else:
             # add left right up down stay policy
             from policy.elementary_policy.policies import (
@@ -125,46 +129,29 @@ class HRL(nn.Module):
                 UpPolicy,
             )
 
-            self.policies.append(
-                LeftPolicy(
-                    state_dim=self.args.state_dim,
-                    action_dim=self.args.action_dim,
-                    is_discrete=self.args.is_discrete,
-                    device=self.args.device,
+            option_map = {
+                "down": DownPolicy,
+                "left": LeftPolicy,
+                "right": RightPolicy,
+                "stay": StayPolicy,
+                "up": UpPolicy,
+            }
+
+            for option in self.args.fine_grained_option:
+                assert option in option_map, f"Unknown fine-grained option: {option}"
+                policy_class = option_map[option]
+                self.policies.append(
+                    policy_class(
+                        state_dim=self.args.state_dim,
+                        action_dim=self.args.action_dim,
+                        is_discrete=self.args.is_discrete,
+                        device=self.args.device,
+                    )
                 )
+            print(
+                "[INFO] Fine-grained options added:",
+                self.policies[-len(self.args.fine_grained_option) :],
             )
-            self.policies.append(
-                RightPolicy(
-                    state_dim=self.args.state_dim,
-                    action_dim=self.args.action_dim,
-                    is_discrete=self.args.is_discrete,
-                    device=self.args.device,
-                )
-            )
-            self.policies.append(
-                UpPolicy(
-                    state_dim=self.args.state_dim,
-                    action_dim=self.args.action_dim,
-                    is_discrete=self.args.is_discrete,
-                    device=self.args.device,
-                )
-            )
-            self.policies.append(
-                DownPolicy(
-                    state_dim=self.args.state_dim,
-                    action_dim=self.args.action_dim,
-                    is_discrete=self.args.is_discrete,
-                    device=self.args.device,
-                )
-            )
-            # self.policies.append(
-            #     StayPolicy(
-            #         state_dim=self.args.state_dim,
-            #         action_dim=self.args.action_dim,
-            #         is_discrete=self.args.is_discrete,
-            #         device=self.args.device,
-            #     )
-            # )
 
         actor = PPO_Actor(
             input_dim=self.args.state_dim,

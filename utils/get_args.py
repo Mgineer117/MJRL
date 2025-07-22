@@ -86,6 +86,12 @@ def get_args():
 
     # === HRL PARAMETER === #
     parser.add_argument(
+        "--fine-grained-option",
+        type=list,
+        default=["left", "right", "up", "down"],
+        help="Number of samples for training.",
+    )
+    parser.add_argument(
         "--state-mask", type=list, default=None, help="Number of samples for training."
     )
     parser.add_argument(
