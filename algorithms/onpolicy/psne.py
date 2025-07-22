@@ -41,7 +41,7 @@ class PSNE_Algorithm(nn.Module):
         trainer.train()
 
     def define_policy(self):
-        from policy.uniform_random import UniformRandom
+        from policy.elementary_policy.uniform_random import UniformRandom
 
         self.uniform_random_policy = UniformRandom(
             state_dim=self.args.state_dim,

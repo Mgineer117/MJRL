@@ -10,8 +10,8 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from log.wandb_logger import WandbLogger
+from policy.elementary_policy.uniform_random import UniformRandom
 from policy.layers.base import Base
-from policy.uniform_random import UniformRandom
 from trainer.base_trainer import BaseTrainer
 from utils.replay_buffer import ReplayBuffer
 
@@ -50,7 +50,7 @@ class OffPolicyTrainer(BaseTrainer):
         self.eval_interval = int(self.timesteps / self.log_interval)
 
         # initialize the essential training components
-        self.last_max_return_mean = 1e10
+        self.last_max_return_mean = -1e10
         self.last_min_return_std = 1e10
 
         self.rendering = args.rendering
@@ -139,7 +139,7 @@ class OffPolicyTrainer(BaseTrainer):
                         self.write_video(
                             running_video,
                             step=step,
-                            logdir=f"videos",
+                            logdir=f"Video",
                             name="running_video",
                         )
 
@@ -212,7 +212,7 @@ class OffPolicyTrainer(BaseTrainer):
 
             # save the best model
             if (
-                np.mean(self.last_return_mean) < self.last_max_return_mean
+                np.mean(self.last_return_mean) >= self.last_max_return_mean
                 and np.mean(self.last_return_std) <= self.last_min_return_std
             ):
                 name = f"best_model.pth"

@@ -36,7 +36,9 @@ class IntrinsicRewardFunctions(nn.Module):
         self.define_eigenvectors()
         self.define_intrinsic_reward_normalizer()
 
-    def forward(self, states: torch.Tensor, next_states: torch.Tensor, i: int):
+    def forward(
+        self, states: torch.Tensor, next_states: torch.Tensor, i: int
+    ) -> torch.Tensor:
         with torch.no_grad():
             feature = self.extractor(states)
             next_feature = self.extractor(next_states)
@@ -65,7 +67,6 @@ class IntrinsicRewardFunctions(nn.Module):
     def define_extractor(self):
         from extractor.extractor import ALLO
         from policy.layers.building_blocks import MLP
-        from policy.uniform_random import UniformRandom
         from trainer.extractor_trainer import ExtractorTrainer
 
         if not os.path.exists("model"):
@@ -159,31 +160,13 @@ class IntrinsicRewardFunctions(nn.Module):
                 epochs = max_epoch  # set current epoch
 
         if epochs < self.args.extractor_epochs:
-            uniform_random_policy = UniformRandom(
-                state_dim=self.args.state_dim,
-                action_dim=self.args.action_dim,
-                is_discrete=self.args.is_discrete,
-                device=self.args.device,
-            )
-            sampler = OnlineSampler(
-                state_dim=self.args.state_dim,
-                action_dim=self.args.action_dim,
-                episode_len=self.args.episode_len,
-                batch_size=self.num_trials * self.args.episode_len,
-                verbose=False,
-            )
+            self.collect_samples()
             trainer = ExtractorTrainer(
                 extractor=extractor,
                 logger=self.logger,
                 writer=self.writer,
                 epochs=self.args.extractor_epochs - epochs,
                 seed=42,  # The result of ALLO should be seed invariant
-            )
-
-            self.batch, _ = sampler.collect_samples(
-                env=self.extractor_env,
-                policy=uniform_random_policy,
-                seed=self.args.seed,
             )
 
             final_timesteps = trainer.train(self.batch)
@@ -208,15 +191,55 @@ class IntrinsicRewardFunctions(nn.Module):
                 F.one_hot(
                     torch.tensor(n // 2), num_classes=self.args.feature_dim
                 ).float()
+                for n in range(2, self.args.num_options + 2)
+            ]
+        elif self.args.option_method == "cvs":
+            if not hasattr(self, "batch"):
+                self.collect_samples()
+
+            states = self.batch["states"]
+            intrinsic_rewards = self.extractor(states)
+            intrinsic_rewards = intrinsic_rewards[:, : self.args.num_options // 2]
+
+            # normalize the intrinsic rewards column-wise
+            # this normalization should be make column vector as a unit vector
+            intrinsic_rewards = F.normalize(intrinsic_rewards, dim=1)
+
+            # perform svd on intrinsic rewards
+            # make sure this operates in CPU
+            # intrinsic_rewards = intrinsic_rewards.cpu().detach().numpy()
+            # _, _, Vt = np.linalg.svd(intrinsic_rewards, full_matrices=False)
+            intrinsic_rewards = intrinsic_rewards.cpu().detach()
+            _, _, Vt = torch.linalg.svd(intrinsic_rewards, full_matrices=False)
+            Vt = Vt.to(self.args.device)
+            # print(Vt.shape)
+            # Vt = torch.from_numpy(Vt).to(self.args.device)
+
+            self.eigenvectors = [
+                torch.cat(
+                    [
+                        Vt[n // 2, :],
+                        torch.zeros(
+                            self.args.feature_dim - Vt.shape[1],
+                            device=Vt.device,
+                            dtype=Vt.dtype,
+                        ),
+                    ]
+                )
                 for n in range(self.args.num_options)
             ]
         elif self.args.option_method == "crs":
+            if not hasattr(self, "batch"):
+                self.collect_samples()
+
             states = self.batch["states"]
             intrinsic_rewards = self.extractor(states)
             intrinsic_rewards = intrinsic_rewards[:, : self.args.num_options // 2]
 
             # perform svd on intrinsic rewards
+            intrinsic_rewards = intrinsic_rewards.cpu()
             _, _, Vt = torch.linalg.svd(intrinsic_rewards)
+            Vt = Vt.to(self.args.device)
 
             self.eigenvectors = [
                 torch.cat(
@@ -235,6 +258,9 @@ class IntrinsicRewardFunctions(nn.Module):
             # measure the reward diversity
 
         elif self.args.option_method == "trs":
+            if not hasattr(self, "batch"):
+                self.collect_samples()
+
             # Combine top and crs — for example, 25% top and 75% crs
             num_top = int(0.25 * self.args.num_options)
             num_crs = self.args.num_options - num_top
@@ -284,13 +310,13 @@ class IntrinsicRewardFunctions(nn.Module):
             self.eigenvectors[i] = eig_vec.to(self.args.device)
         self.eigenvector_signs = [2 * (n % 2) - 1 for n in range(self.args.num_options)]
 
-        # heatmaps = self.extractor_env.get_rewards_heatmap(
-        #     self.extractor, self.eigenvectors
-        # )
-
-        # self.logger.write_images(
-        #     step=self.current_timesteps, images=heatmaps, logdir="Image/Heatmaps"
-        # )
+        if self.args.env_name in ("FourRooms-v0", "Maze-v0", "Maze-v1"):
+            heatmaps = self.extractor_env.get_rewards_heatmap(
+                self.extractor, self.eigenvector_signs, self.eigenvectors
+            )
+            self.logger.write_images(
+                step=self.current_timesteps, images=heatmaps, logdir="Image/Heatmaps"
+            )
 
     def define_intrinsic_reward_normalizer(self):
         from utils.wrapper import RunningMeanStd
@@ -298,3 +324,25 @@ class IntrinsicRewardFunctions(nn.Module):
         self.reward_rms = []
         for _ in range(self.args.num_options):
             self.reward_rms.append(RunningMeanStd(shape=(1,)))
+
+    def collect_samples(self):
+        from policy.elementary_policy.uniform_random import UniformRandom
+
+        uniform_random_policy = UniformRandom(
+            state_dim=self.args.state_dim,
+            action_dim=self.args.action_dim,
+            is_discrete=self.args.is_discrete,
+            device=self.args.device,
+        )
+        sampler = OnlineSampler(
+            state_dim=self.args.state_dim,
+            action_dim=self.args.action_dim,
+            episode_len=self.args.episode_len,
+            batch_size=self.num_trials * self.args.episode_len,
+            verbose=False,
+        )
+        self.batch, _ = sampler.collect_samples(
+            env=self.extractor_env,
+            policy=uniform_random_policy,
+            seed=self.args.seed,
+        )

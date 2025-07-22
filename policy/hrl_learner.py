@@ -19,6 +19,7 @@ class HRL_Learner(Base):
         actor: PPO_Actor,
         critic: PPO_Critic,
         nupdates: int,
+        num_options: int,
         actor_lr: float = 3e-4,
         critic_lr: float = 5e-4,
         num_minibatch: int = 8,
@@ -41,6 +42,7 @@ class HRL_Learner(Base):
         self.state_dim = actor.state_dim
         self.action_dim = actor.action_dim
 
+        self.num_options = num_options
         self.num_minibatch = num_minibatch
         self.minibatch_size = minibatch_size
         self.entropy_scaler = entropy_scaler
@@ -89,7 +91,9 @@ class HRL_Learner(Base):
                 "dist": torch.tensor(np.nan).to(self.device),
             }
 
-        is_option = True if option_idx < len(self.policies) - 1 else False
+        is_option = (
+            True if option_idx < len(self.policies) - self.num_options else False
+        )
         if is_option:
             a, _ = self.policies[option_idx].actor(state, deterministic=True)
             value = self.policies[option_idx].critic(state)

@@ -13,11 +13,11 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from log.wandb_logger import WandbLogger
+from policy.elementary_policy.uniform_random import UniformRandom
 from policy.layers.base import Base
-from policy.uniform_random import UniformRandom
+from trainer.base_trainer import BaseTrainer
 from utils.rl import estimate_advantages
 from utils.sampler import OnlineSampler
-from trainer.base_trainer import BaseTrainer
 
 
 def compare_weights(policy1, policy2):
@@ -43,13 +43,14 @@ class HRLTrainer(BaseTrainer):
         sampler: OnlineSampler,
         logger: WandbLogger,
         writer: SummaryWriter,
-        init_timesteps: int = 0,
-        timesteps: int = 1e6,
-        hl_timesteps: int = 1e6,
-        log_interval: int = 100,
-        eval_num: int = 10,
-        rendering: bool = False,
-        seed: int = 0,
+        init_timesteps: int,
+        args,
+        # timesteps: int = 1e6,
+        # hl_timesteps: int = 1e6,
+        # log_interval: int = 100,
+        # eval_num: int = 10,
+        # rendering: bool = False,
+        # seed: int = 0,
     ) -> None:
         self.env = env
         self.hl_policy = hl_policy
@@ -57,29 +58,32 @@ class HRLTrainer(BaseTrainer):
 
         self.intrinsic_reward_fn = intrinsic_reward_fn
 
-        self.num_vectors = len(self.policies) - 1
+        self.num_options = args.num_options
 
         self.hl_sampler = hl_sampler
         self.sampler = sampler
-        self.eval_num = eval_num
+
+        self.eval_num = args.eval_num
 
         self.logger = logger
         self.writer = writer
 
         # training parameters
         self.init_timesteps = init_timesteps
-        self.timesteps = timesteps
-        self.hl_timesteps = hl_timesteps
+        self.timesteps = args.timesteps
+        self.hl_timesteps = args.hl_timesteps
 
-        self.log_interval = log_interval
+        self.log_interval = args.log_interval
         self.eval_interval = int(self.timesteps / self.log_interval)
+        self.hl_eval_interval = int(self.hl_timesteps / self.log_interval)
 
         # initialize the essential training components
-        self.last_min_return_mean = 1e10
+        self.last_max_return_mean = -1e10
         self.last_min_return_std = 1e10
 
-        self.rendering = rendering
-        self.seed = seed
+        self.episode_len = args.episode_len
+        self.rendering = args.rendering
+        self.seed = args.seed
 
     def train(self) -> dict[str, float]:
         start_time = time.time()
@@ -89,13 +93,13 @@ class HRLTrainer(BaseTrainer):
 
         # Train loop
         eval_idx = 0
-        total_tiemesteps = int(self.timesteps * self.num_vectors + self.init_timesteps)
+        total_tiemesteps = int(self.timesteps * self.num_options + self.init_timesteps)
         with tqdm(
             total=total_tiemesteps,
             initial=self.init_timesteps,
             desc=f"{self.hl_policy.name} Training (Timesteps)",
         ) as pbar:
-            for option_idx in range(self.num_vectors):
+            for option_idx in range(self.num_options):
                 while pbar.n < int(
                     (option_idx + 1) * (self.timesteps + self.init_timesteps)
                 ):
@@ -149,13 +153,50 @@ class HRLTrainer(BaseTrainer):
                     ] = (
                         remaining_time / 3600
                     )  # Convert to hours
-                    loss_dict[f"{self.policy.name}/analytics/discounted_return"] = (
+                    loss_dict[f"{self.policies[0].name}/analytics/return"] = (
                         self.average_discounted_return(
                             batch["rewards"], batch["terminals"], self.hl_policy.gamma
                         )
                     )
 
                     self.write_log(loss_dict, step=current_step)
+
+                    #### EVALUATIONS ####
+                    if current_step >= self.eval_interval * (eval_idx + 1):
+                        ### Eval Loop ###
+                        self.policies[option_idx].eval()
+                        eval_idx += 1
+
+                        eval_dict, running_video = self.evaluate(option_idx)
+
+                        # Manual logging
+                        if self.policies[option_idx].state_visitation is not None:
+                            visitation_map = self.policies[option_idx].state_visitation
+                            vmin, vmax = visitation_map.min(), visitation_map.max()
+                            visitation_map = (visitation_map - vmin) / (
+                                vmax - vmin + 1e-8
+                            )
+                            visitation_map = self.visitation_to_rgb(visitation_map)
+                            self.write_image(
+                                image=visitation_map,
+                                step=current_step,
+                                logdir="Image",
+                                name=f"sub-policy visitation map {option_idx}",
+                            )
+
+                        self.write_log(eval_dict, step=current_step, eval_log=True)
+                        self.write_video(
+                            running_video,
+                            step=current_step,
+                            logdir=f"Video",
+                            name=f"sub-policy running_video {option_idx}",
+                        )
+
+                        self.save_model(
+                            current_step,
+                            self.policies[option_idx],
+                            f"sub-policy {option_idx}",
+                        )
 
         # assign trained option policies
         eval_idx = 0
@@ -198,8 +239,8 @@ class HRLTrainer(BaseTrainer):
                 self.write_log(loss_dict, step=current_step)
 
                 #### EVALUATIONS ####
-                if current_step >= self.eval_interval * (eval_idx + 1):
-                    ### Eval Loop
+                if current_step >= self.hl_eval_interval * (eval_idx + 1):
+                    ### Eval Loop ###
                     self.hl_policy.eval()
                     eval_idx += 1
 
@@ -222,7 +263,7 @@ class HRLTrainer(BaseTrainer):
                     self.write_video(
                         running_video,
                         step=current_step,
-                        logdir=f"videos",
+                        logdir=f"Video",
                         name="running_video",
                     )
 
@@ -240,7 +281,9 @@ class HRLTrainer(BaseTrainer):
 
         return current_step
 
-    def evaluate(self, policy: nn.Module):
+    def evaluate(self, option_idx: int):
+        policy = self.policies[option_idx]
+
         ep_buffer = []
         image_array = []
         for num_episodes in range(self.eval_num):
@@ -249,7 +292,7 @@ class HRLTrainer(BaseTrainer):
             # Env initialization
             state, infos = self.env.reset(seed=self.seed)
 
-            for t in range(self.env.max_steps):
+            for t in range(self.episode_len):
                 with torch.no_grad():
                     a, _ = policy(state, deterministic=True)
                     a = a.cpu().numpy().squeeze(0) if a.shape[-1] > 1 else [a.item()]
@@ -258,7 +301,12 @@ class HRLTrainer(BaseTrainer):
                     image = self.env.render()
                     image_array.append(image)
 
-                next_state, rew, term, trunc, infos = self.env.step(a)
+                next_state, _, term, trunc, infos = self.env.step(a)
+                rew = (
+                    self.intrinsic_reward_fn(state, next_state, option_idx)
+                    .cpu()
+                    .numpy()
+                )
                 done = term or trunc
 
                 state = next_state
@@ -277,8 +325,8 @@ class HRLTrainer(BaseTrainer):
         return_mean, return_std = np.mean(return_list), np.std(return_list)
 
         eval_dict = {
-            f"eval/return_mean": return_mean,
-            f"eval/return_std": return_std,
+            f"eval/sub-policy return_mean {option_idx}": return_mean,
+            f"eval/sub-policy return_std {option_idx}": return_std,
         }
 
         return eval_dict, image_array
@@ -292,7 +340,7 @@ class HRLTrainer(BaseTrainer):
             # Env initialization
             state, infos = self.env.reset(seed=self.seed)
 
-            for t in range(self.env.max_steps):
+            for t in range(self.episode_len):
                 with torch.no_grad():
                     [option_idx, a], metaData = self.hl_policy(
                         state, None, deterministic=True
@@ -388,16 +436,17 @@ class HRLTrainer(BaseTrainer):
             torch.save(model.state_dict(), path)
 
             # save the best model
-            if (
-                np.mean(self.last_return_mean) < self.last_min_return_mean
-                and np.mean(self.last_return_std) <= self.last_min_return_std
-            ):
-                name = f"best_model.pth"
-                path = os.path.join(self.logger.log_dir, name)
-                torch.save(model.state_dict(), path)
+            if len(self.last_return_mean) > 0 and len(self.last_return_std) > 0:
+                if (
+                    np.mean(self.last_return_mean) >= self.last_max_return_mean
+                    and np.mean(self.last_return_std) <= self.last_min_return_std
+                ):
+                    name = f"best_model.pth"
+                    path = os.path.join(self.logger.log_dir, name)
+                    torch.save(model.state_dict(), path)
 
-                self.last_min_return_mean = np.mean(self.last_return_mean)
-                self.last_min_return_std = np.mean(self.last_return_std)
+                    self.last_max_return_mean = np.mean(self.last_return_mean)
+                    self.last_min_return_std = np.mean(self.last_return_std)
         else:
             raise ValueError("Error: Model is not identifiable!!!")
 

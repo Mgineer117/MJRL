@@ -16,10 +16,10 @@ def get_args():
 
     # === TRAINING PARAMETER === #
     parser.add_argument(
-        "--hl-timesteps", type=int, default=1_000_000, help="Number of training epochs."
+        "--hl-timesteps", type=int, default=None, help="Number of training epochs."
     )
     parser.add_argument(
-        "--timesteps", type=int, default=1_000_000, help="Number of training epochs."
+        "--timesteps", type=int, default=None, help="Number of training epochs."
     )
     parser.add_argument(
         "--extractor-epochs",

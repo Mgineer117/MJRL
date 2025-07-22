@@ -1,11 +1,11 @@
 import datetime
+import json
 import os
 import random
-import uuid
 
 import torch
-import wandb
 
+import wandb
 from algorithms import *
 from utils.functions import concat_csv_columnwise_and_delete, seed_all, setup_logger
 from utils.get_args import get_args
@@ -18,6 +18,18 @@ os.environ["WANDB_SILENT"] = "true"
 def run(args, seed, exp_time):
     # fix seed
     seed_all(seed)
+
+    # use env-specific parameters
+    new_args_path = f"configs/{args.env_name}.json"
+    with open(new_args_path, "r") as f:
+        new_args = json.load(f)
+
+    # Replace elements in args with those from new_args if they exist
+    for key, value in new_args.items():
+        if hasattr(args, key):
+            # if args key is None pass
+            if getattr(args, key) is None:
+                setattr(args, key, value)
 
     # get env
     env = call_env(args)

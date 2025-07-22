@@ -6,13 +6,13 @@ from gymnasium.envs.registration import register
 """
 
 
-EPI_LENGTH = {"Fourrooms-v0": 100, "CtF-v0": 200}
+EPI_LENGTH = {"FourRooms-v0": 100, "CtF-v0": 200}
 
 register(
-    id="Fourrooms-v0",
+    id="FourRooms-v0",
     entry_point="gridworld.envs.fourrooms:FourRooms",
-    kwargs={"grid_type": 0, "max_steps": EPI_LENGTH["Fourrooms-v0"]},
-    max_episode_steps=EPI_LENGTH["Fourrooms-v0"],
+    kwargs={"grid_type": 0, "max_steps": EPI_LENGTH["FourRooms-v0"]},
+    max_episode_steps=EPI_LENGTH["FourRooms-v0"],
 )
 
 register(

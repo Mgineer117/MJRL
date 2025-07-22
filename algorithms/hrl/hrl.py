@@ -4,10 +4,10 @@ from copy import deepcopy
 import torch
 import torch.nn as nn
 
+from policy.elementary_policy.uniform_random import UniformRandom
 from policy.hrl_learner import HRL_Learner
 from policy.layers.ppo_networks import PPO_Actor, PPO_Critic
 from policy.ppo_learner import PPO_Learner
-from policy.uniform_random import UniformRandom
 from trainer.hrl_trainer import HRLTrainer
 from utils.intrinsic_rewards import IntrinsicRewardFunctions
 from utils.sampler import HLSampler, OnlineSampler
@@ -44,7 +44,7 @@ class HRL(nn.Module):
 
         hl_sampler = HLSampler(
             state_dim=self.args.state_dim,
-            action_dim=int(self.args.num_options + 1),
+            action_dim=len(self.policies),
             episode_len=self.args.episode_len,
             batch_size=int(self.args.minibatch_size * self.args.num_minibatch),
             max_option_len=self.args.max_option_duration,
@@ -70,15 +70,8 @@ class HRL(nn.Module):
             logger=self.logger,
             writer=self.writer,
             init_timesteps=self.current_timesteps,
-            timesteps=self.args.timesteps,
-            hl_timesteps=self.args.hl_timesteps,
-            log_interval=self.args.log_interval,
-            eval_num=self.args.eval_num,
-            rendering=self.args.rendering,
-            seed=self.args.seed,
+            args=self.args,
         )
-
-        # design hl_policy and hl_sampler and trainer
 
         trainer.train()
 
@@ -113,19 +106,70 @@ class HRL(nn.Module):
             policy.name = "HRL_options"
             self.policies.append(policy)
 
-        uniform_random_policy = UniformRandom(
-            state_dim=self.args.state_dim,
-            action_dim=self.args.action_dim,
-            is_discrete=self.args.is_discrete,
-            device=self.args.device,
-        )
+        if not self.args.is_discrete:
+            uniform_random_policy = UniformRandom(
+                state_dim=self.args.state_dim,
+                action_dim=self.args.action_dim,
+                is_discrete=self.args.is_discrete,
+                device=self.args.device,
+            )
 
-        self.policies.append(uniform_random_policy)
+            self.policies.append(uniform_random_policy)
+        else:
+            # add left right up down stay policy
+            from policy.elementary_policy.policies import (
+                DownPolicy,
+                LeftPolicy,
+                RightPolicy,
+                StayPolicy,
+                UpPolicy,
+            )
+
+            self.policies.append(
+                LeftPolicy(
+                    state_dim=self.args.state_dim,
+                    action_dim=self.args.action_dim,
+                    is_discrete=self.args.is_discrete,
+                    device=self.args.device,
+                )
+            )
+            self.policies.append(
+                RightPolicy(
+                    state_dim=self.args.state_dim,
+                    action_dim=self.args.action_dim,
+                    is_discrete=self.args.is_discrete,
+                    device=self.args.device,
+                )
+            )
+            self.policies.append(
+                UpPolicy(
+                    state_dim=self.args.state_dim,
+                    action_dim=self.args.action_dim,
+                    is_discrete=self.args.is_discrete,
+                    device=self.args.device,
+                )
+            )
+            self.policies.append(
+                DownPolicy(
+                    state_dim=self.args.state_dim,
+                    action_dim=self.args.action_dim,
+                    is_discrete=self.args.is_discrete,
+                    device=self.args.device,
+                )
+            )
+            # self.policies.append(
+            #     StayPolicy(
+            #         state_dim=self.args.state_dim,
+            #         action_dim=self.args.action_dim,
+            #         is_discrete=self.args.is_discrete,
+            #         device=self.args.device,
+            #     )
+            # )
 
         actor = PPO_Actor(
             input_dim=self.args.state_dim,
             hidden_dim=self.args.actor_fc_dim,
-            action_dim=int(self.args.num_options + 1),
+            action_dim=len(self.policies),
             is_discrete=True,
             device=self.args.device,
         )
@@ -135,6 +179,7 @@ class HRL(nn.Module):
             actor=actor,
             critic=critic,
             nupdates=self.args.hl_nupdates,
+            num_options=self.args.num_options,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
             num_minibatch=self.args.num_minibatch,

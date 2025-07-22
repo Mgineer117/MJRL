@@ -42,7 +42,7 @@ class OnPolicyTrainer(BaseTrainer):
         self.eval_interval = int(self.timesteps / self.log_interval)
 
         # initialize the essential training components
-        self.last_max_return_mean = 1e10
+        self.last_max_return_mean = -1e10
         self.last_min_return_std = 1e10
 
         self.rendering = args.rendering
@@ -76,7 +76,7 @@ class OnPolicyTrainer(BaseTrainer):
                 loss_dict[f"{self.policy.name}/analytics/timesteps"] = step + timesteps
                 loss_dict[f"{self.policy.name}/analytics/sample_time"] = sample_time
                 loss_dict[f"{self.policy.name}/analytics/update_time"] = update_time
-                loss_dict[f"{self.policy.name}/analytics/avg_discounted_return"] = (
+                loss_dict[f"{self.policy.name}/analytics/return"] = (
                     self.average_discounted_return(
                         batch["rewards"], batch["terminals"], self.policy.gamma
                     )
@@ -109,7 +109,7 @@ class OnPolicyTrainer(BaseTrainer):
                     self.write_video(
                         running_video,
                         step=step,
-                        logdir=f"videos",
+                        logdir=f"Video",
                         name="running_video",
                     )
 
