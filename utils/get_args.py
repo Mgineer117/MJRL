@@ -86,6 +86,9 @@ def get_args():
 
     # === HRL PARAMETER === #
     parser.add_argument(
+        "--state-mask", type=list, default=None, help="Number of samples for training."
+    )
+    parser.add_argument(
         "--feature-dim", type=int, default=20, help="Number of samples for training."
     )
     parser.add_argument(

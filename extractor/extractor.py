@@ -47,6 +47,7 @@ class ALLO(Base):
         epochs: int,
         batch_size: int,
         discount_sampling_factor: float,
+        state_mask: list | None = None,
         device: str = "cpu",
     ):
         super().__init__(device=device)
@@ -62,13 +63,14 @@ class ALLO(Base):
         self.lr_scheduler = LambdaLR(self.optimizer, lr_lambda=self.lr_lambda)
 
         # === PARAMETERS === #
+        self.state_mask = list(range(self.d)) if state_mask is None else state_mask
         self.batch_size = batch_size
-        self.lr_duals = 1e-3
+        self.lr_duals = 1e-2
         self.lr_dual_velocities = 0.1
         self.lr_barrier_coeff = 1e-2
         self.use_barrier_for_duals = 0
         self.min_duals = 0.0
-        self.max_duals = 10.0
+        self.max_duals = 100.0
         self.barrier_increase_rate = 0.1
         self.min_barrier_coefs = 0
         self.max_barrier_coefs = 10
@@ -108,7 +110,7 @@ class ALLO(Base):
         if len(states.shape) == 1 or len(states.shape) == 3:
             states = states.unsqueeze(0)
 
-        features = self.network(states)
+        features = self.network(states[:, self.state_mask])
         return features
 
     def learn(self, batch: dict):
@@ -126,9 +128,6 @@ class ALLO(Base):
 
         phi1 = self(s1)  # [B, d]
         phi2 = self(s2)
-
-        phi1 = phi1[:, self.permutation_array]
-        phi2 = phi2[:, self.permutation_array]
 
         n, d = phi1.size()
 

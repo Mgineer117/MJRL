@@ -75,8 +75,13 @@ class IntrinsicRewardFunctions(nn.Module):
             os.makedirs(f"model/{self.args.env_name}")
 
         # === CREATE FEATURE EXTRACTOR === #
+        input_dim = (
+            np.prod(self.args.state_dim)
+            if self.args.state_mask is None
+            else len(self.args.state_mask)
+        )
         feature_network = MLP(
-            input_dim=np.prod(self.args.state_dim),
+            input_dim=input_dim,
             hidden_dims=[256, 256, 256, 256],
             output_dim=self.args.feature_dim,
             activation=nn.ReLU(),
@@ -88,7 +93,8 @@ class IntrinsicRewardFunctions(nn.Module):
             extractor_lr=self.args.extractor_lr,
             epochs=self.args.extractor_epochs,
             batch_size=1024,
-            discount_sampling_factor=self.args.discount_sampling_factor,  # ALLO uses 0.99 discount
+            discount_sampling_factor=self.args.discount_sampling_factor,
+            state_mask=self.args.state_mask,
             device=self.args.device,
         )
 
