@@ -60,6 +60,7 @@ class DDPG_Algorithm(nn.Module):
                 action_dim=self.args.action_dim,
                 action_space=self.env.action_space,
                 action_noise_coeff=self.args.action_noise_coeff,
+                activation=nn.ReLU(),
                 device=self.args.device,
             )
             critic = TD3_Critic(

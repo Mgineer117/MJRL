@@ -23,6 +23,7 @@ class SAC_Learner(Base):
         gamma: float = 0.99,
         tau: float = 0.005,
         entropy_scaler: float = 1e-3,
+        use_entropy_target: bool = True,
         is_discrete: bool = False,
         device=torch.device("cpu"),
     ):
@@ -35,9 +36,21 @@ class SAC_Learner(Base):
         self.state_dim = actor.state_dim
         self.action_dim = actor.action_dim
 
+        self.use_entropy_target = use_entropy_target
+        if self.use_entropy_target:
+            init_value = 0.2
+            self.entropy_scaler = nn.Parameter(
+                init_value * torch.ones(1, dtype=torch.float32, device=device)
+            )
+            self.entropy_optimizer = torch.optim.Adam(
+                [self.entropy_scaler], lr=critic_lr
+            )
+            self.entropy_target = -actor.action_dim
+        else:
+            self.entropy_scaler = entropy_scaler
+
         self.gamma = gamma
         self.tau = tau
-        self.entropy_scaler = entropy_scaler
         self.nupdates = nupdates
 
         # trainable networks
@@ -203,14 +216,8 @@ class SAC_Learner(Base):
         )
         self.critic_optimizer.step()
 
-        ### === LOGGING === ###
-        loss_dict[f"{self.name}/critic_loss"] = critic_loss.item()
-        loss_dict[f"{self.name}/td_error"] = td_error.item()
-        loss_dict.update(critic_grad_dict)
-        loss_dict.update(critic_norm_dict)
-
         ### === ACTOR UPDATE === ###
-        actor_loss = self.actor_loss(states)
+        actor_loss, infos = self.actor_loss(states)
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
@@ -229,7 +236,29 @@ class SAC_Learner(Base):
         )
         self.actor_optimizer.step()
 
+        ### === ENTROPY SCALER UPDATE === ###
+        # note that entropy scaler is updated after critic and actor update
+        # this ensures that the entropy scaler update does not affect the critic and actor loss
+        if self.use_entropy_target:
+            # Update entropy scaler
+            entropy_loss = -(
+                torch.log(self.entropy_scaler)
+                * (infos["logprobs"] + self.entropy_target).detach()
+            ).mean()
+
+            self.entropy_optimizer.zero_grad()
+            entropy_loss.backward()
+            self.entropy_optimizer.step()
+        else:
+            entropy_loss = torch.tensor(0.0, device=self.device)
+
+        ### === LOGGING === ###
+        loss_dict[f"{self.name}/critic_loss"] = critic_loss.item()
+        loss_dict[f"{self.name}/td_error"] = td_error.item()
         loss_dict[f"{self.name}/actor_loss"] = actor_loss.item()
+        loss_dict[f"{self.name}/entropy_loss"] = entropy_loss.item()
+        loss_dict.update(critic_grad_dict)
+        loss_dict.update(critic_norm_dict)
         loss_dict.update(actor_grad_dict)
         loss_dict.update(actor_norm_dict)
 
@@ -260,7 +289,7 @@ class SAC_Learner(Base):
 
         actor_loss = (self.entropy_scaler * infos["logprobs"] - Q).mean()
 
-        return actor_loss
+        return actor_loss, infos  # , entropy_loss  # , infos["entropy"].mean()
 
     def critic_loss(
         self,

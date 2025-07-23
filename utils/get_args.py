@@ -86,6 +86,11 @@ def get_args():
     parser.add_argument(
         "--policy-freq", type=int, default=2, help="Base learning rate."
     )
+    parser.add_argument(
+        "--use-entropy-target",
+        action="store_true",
+        help="Path to a directory for storing the log.",
+    )
 
     # === HRL PARAMETER === #
     parser.add_argument(

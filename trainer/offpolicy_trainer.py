@@ -109,12 +109,13 @@ class OffPolicyTrainer(BaseTrainer):
                     pbar.update(1)
 
                     if done:
-                        return_dict = {
-                            f"{self.policy.name}/return": self.discounted_return(
-                                ep_reward, self.policy.gamma
-                            ),
-                        }
-                        self.write_log(return_dict, step=current_step)
+                        if current_step >= self.warmup_samples:
+                            return_dict = {
+                                f"{self.policy.name}/return": self.discounted_return(
+                                    ep_reward, self.policy.gamma
+                                ),
+                            }
+                            self.write_log(return_dict, step=current_step)
                         break
 
                 if current_step >= self.warmup_samples:

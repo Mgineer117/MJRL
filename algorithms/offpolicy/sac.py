@@ -63,6 +63,7 @@ class SAC_Algorithm(nn.Module):
                 hidden_dim=self.args.actor_fc_dim,
                 action_dim=self.args.action_dim,
                 action_space=self.env.action_space,
+                activation=nn.ReLU(),
                 device=self.args.device,
             )
             critic = SAC_Critic(
@@ -79,6 +80,7 @@ class SAC_Algorithm(nn.Module):
             critic_lr=self.args.critic_lr,
             gamma=self.args.gamma,
             tau=self.args.tau,
+            # use_entropy_target=self.args.use_entropy_target,
             is_discrete=self.args.is_discrete,
             device=self.args.device,
         )
