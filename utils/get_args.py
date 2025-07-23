@@ -16,15 +16,15 @@ def get_args():
 
     # === TRAINING PARAMETER === #
     parser.add_argument(
-        "--hl-timesteps", type=int, default=None, help="Number of training epochs."
+        "--hl-timesteps", type=int, default=1e6, help="Number of training epochs."
     )
     parser.add_argument(
-        "--timesteps", type=int, default=None, help="Number of training epochs."
+        "--timesteps", type=int, default=1e6, help="Number of training epochs."
     )
     parser.add_argument(
         "--extractor-epochs",
         type=int,
-        default=200000,
+        default=100000,
         help="Number of training epochs.",
     )
     parser.add_argument("--num-minibatch", type=int, default=4, help="")
@@ -51,6 +51,7 @@ def get_args():
     )
     parser.add_argument("--gamma", type=float, default=0.99, help="Base learning rate.")
 
+    # === ON-POLICY RL PARAMETER === #
     parser.add_argument("--K-epochs", type=int, default=5, help="")
     parser.add_argument(
         "--target-kl",
@@ -70,11 +71,13 @@ def get_args():
     parser.add_argument(
         "--eps-clip", type=float, default=0.2, help="Base learning rate."
     )
+
+    # === OFF-POLICY RL PARAMETER === #
     parser.add_argument(
         "--buffer-size", type=int, default=200_000, help="Base learning rate."
     )
     parser.add_argument(
-        "--warmup-samples", type=int, default=1_000, help="Base learning rate."
+        "--warmup-samples", type=int, default=20_000, help="Base learning rate."
     )
     parser.add_argument(
         "--action-noise-coeff", type=float, default=0.1, help="Base learning rate."
@@ -104,12 +107,12 @@ def get_args():
         help="Number of samples for training.",
     )
     parser.add_argument(
-        "--num-options", type=int, default=8, help="Number of samples for training."
+        "--num-options", type=int, default=6, help="Number of samples for training."
     )
     parser.add_argument(
         "--max-option-duration",
         type=int,
-        default=6,
+        default=10,
         help="Number of samples for training.",
     )
     parser.add_argument(

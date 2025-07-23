@@ -1,9 +1,8 @@
-import os
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from gymnasium import spaces
 
 
 class Base(nn.Module):
@@ -19,6 +18,31 @@ class Base(nn.Module):
         self.huber_loss = F.smooth_l1_loss
 
         self.state_visitation = None
+
+    def scale_action(self, action: torch.Tensor) -> torch.Tensor:
+        """
+        Rescale the action from [low, high] to [-1, 1]
+        (no need for symmetric action space)
+
+        :param action: Action to scale
+        :return: Scaled action
+        """
+
+        return (
+            2.0 * ((action - self.action_low) / (self.action_high - self.action_low))
+            - 1.0
+        )
+
+    def unscale_action(self, scaled_action: torch.Tensor) -> torch.Tensor:
+        """
+        Rescale the action from [-1, 1] to [low, high]
+        (no need for symmetric action space)
+
+        :param scaled_action: Action to un-scale
+        """
+        return self.action_low + (
+            0.5 * (scaled_action + 1.0) * (self.action_high - self.action_low)
+        )
 
     def print_parameter_devices(self, model):
         for name, param in model.named_parameters():

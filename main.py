@@ -40,9 +40,10 @@ def run(args, seed, exp_time):
         "ppo": PPO_Algorithm,
         "trpo": TRPO_Algorithm,
         "ddpg": DDPG_Algorithm,
+        "sac": SAC_Algorithm,
         "psne": PSNE_Algorithm,
         "drndppo": DRND_Algorithm,
-        "hrl": HRL,
+        "hrl_allo": HRL_ALLO,
     }
 
     # instantiate algorithm

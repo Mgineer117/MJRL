@@ -69,16 +69,18 @@ class OffPolicyTrainer(BaseTrainer):
             desc=f"{self.policy.name} Training (Timesteps)",
         ) as pbar:
             while pbar.n < self.timesteps:
-                step = pbar.n + 1  # + 1 to avoid zero division
+                current_step = pbar.n + 1  # + 1 to avoid zero division
                 self.policy.train()
 
                 policy = (
-                    self.random_policy if step < self.warmup_samples else self.policy
+                    self.random_policy
+                    if current_step < self.warmup_samples
+                    else self.policy
                 )
 
                 # Env initialization
+                ep_reward = []
                 state, infos = self.env.reset(seed=self.seed)
-
                 for t in range(self.episode_len):
                     with torch.no_grad():
                         a, _ = policy(state, deterministic=False)
@@ -94,26 +96,35 @@ class OffPolicyTrainer(BaseTrainer):
                         trunc = True
                     done = term or trunc
 
+                    ep_reward.append(reward)
                     self.replay_buffer.append(state, action, next_state, reward, done)
 
-                    if step >= self.warmup_samples:
+                    if current_step >= self.warmup_samples:
                         loss_dict, update_time = policy.learn(self.replay_buffer)
+                        self.write_log(loss_dict, step=current_step)
 
                     state = next_state
+
+                    current_step += 1
                     pbar.update(1)
 
                     if done:
-
+                        return_dict = {
+                            f"{self.policy.name}/return": self.discounted_return(
+                                ep_reward, self.policy.gamma
+                            ),
+                        }
+                        self.write_log(return_dict, step=current_step)
                         break
 
-                if step >= self.warmup_samples:
+                if current_step >= self.warmup_samples:
                     # Update environment steps and calculate time metrics
-                    loss_dict[f"{self.policy.name}/analytics/timesteps"] = step
+                    loss_dict[f"{self.policy.name}/analytics/timesteps"] = current_step
                     loss_dict[f"{self.policy.name}/analytics/update_time"] = update_time
-                    self.write_log(loss_dict, step=step)
+                    self.write_log(loss_dict, step=current_step)
 
                     #### EVALUATIONS ####
-                    if step >= self.eval_interval * (eval_idx + 1):
+                    if current_step >= self.eval_interval * (eval_idx + 1):
                         ### Eval Loop
                         self.policy.eval()
                         eval_idx += 1
@@ -130,15 +141,15 @@ class OffPolicyTrainer(BaseTrainer):
                             visitation_map = self.visitation_to_rgb(visitation_map)
                             self.write_image(
                                 image=visitation_map,
-                                step=step,
+                                step=current_step,
                                 logdir="Image",
                                 name="visitation map",
                             )
 
-                        self.write_log(eval_dict, step=step, eval_log=True)
+                        self.write_log(eval_dict, step=current_step, eval_log=True)
                         self.write_video(
                             running_video,
-                            step=step,
+                            step=current_step,
                             logdir=f"Video",
                             name="running_video",
                         )
@@ -146,7 +157,7 @@ class OffPolicyTrainer(BaseTrainer):
                         self.last_return_mean.append(eval_dict[f"eval/return_mean"])
                         self.last_return_std.append(eval_dict[f"eval/return_std"])
 
-                        self.save_model(step)
+                        self.save_model(current_step)
 
                 torch.cuda.empty_cache()
 

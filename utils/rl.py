@@ -9,7 +9,7 @@ def call_env(args, verbose=True, spawn_agent_random: bool = False):
     """
     Call the environment based on the given name.
     """
-    if args.env_name in ("Fourrooms-v0", "CtF-v0"):
+    if args.env_name in ("FourRooms-v0", "CtF-v0"):
         env = gym.make(
             args.env_name,
             render_mode="rgb_array",

@@ -1,7 +1,8 @@
 # algorithms/__init__.py
 
-from .hrl.hrl import HRL
+from .hrl.hrl_allo import HRL_ALLO
 from .offpolicy.ddpg import DDPG_Algorithm
+from .offpolicy.sac import SAC_Algorithm
 from .onpolicy.drnd import DRND_Algorithm
 from .onpolicy.ppo import PPO_Algorithm
 from .onpolicy.psne import PSNE_Algorithm
@@ -13,5 +14,6 @@ __all__ = [
     "PSNE_Algorithm",
     "DRND_Algorithm",
     "DDPG_Algorithm",
-    "HRL",
+    "SAC_Algorithm",
+    "HRL_ALLO",
 ]

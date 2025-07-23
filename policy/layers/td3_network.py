@@ -6,6 +6,7 @@ from torch.distributions import Categorical, MultivariateNormal, Normal
 
 from policy.layers.base import Base
 from policy.layers.building_blocks import MLP
+from gymnasium import spaces
 
 
 class TD3_Actor(Base):
@@ -14,7 +15,7 @@ class TD3_Actor(Base):
         input_dim: int,
         hidden_dim: list,
         action_dim: int,
-        action_scale: tuple,
+        action_space: spaces,
         action_noise_coeff: float,
         activation: nn.Module = nn.ReLU(),
         device=torch.device("cpu"),
@@ -25,10 +26,13 @@ class TD3_Actor(Base):
         self.hidden_dim = hidden_dim
         self.action_dim = np.prod(action_dim)
 
-        self.action_scale = [torch.from_numpy(x).to(device) for x in action_scale]
-        self.action_max = torch.max(
-            torch.abs(self.action_scale[0]), torch.abs(self.action_scale[1])
-        )
+        self.action_space = action_space
+        assert isinstance(
+            self.action_space, spaces.Box
+        ), f"The action space must be a Box(): {self.action_space}"
+
+        self.action_high = torch.from_numpy(action_space.high).to(device)
+        self.action_low = torch.from_numpy(action_space.low).to(device)
 
         self.is_discrete = False
         self.action_noise_coeff = action_noise_coeff
@@ -51,7 +55,7 @@ class TD3_Actor(Base):
         deterministic: bool,
     ):
         logits = self.model(state)
-        action = self.action_max * F.tanh(logits)
+        action = self.unscale_action(F.tanh(logits))
 
         if not deterministic:
             # Add small exploration noise for action selection (not training!)
@@ -60,9 +64,8 @@ class TD3_Actor(Base):
             noise = torch.normal(mean, var)
             action += noise
 
-        action = torch.max(
-            torch.min(action, self.action_scale[1]), self.action_scale[0]
-        )
+        # make sure noise does not exceed action bounds
+        action = torch.clamp(action, self.action_low, self.action_high)
 
         return action, {
             "dist": self._dummy,

@@ -52,6 +52,7 @@ class ALLO(Base):
     ):
         super().__init__(device=device)
         self.name = "ALLO"
+        self.input_dim = network.input_dim
         self.d = network.output_dim
         self.epochs = epochs
 
@@ -63,17 +64,21 @@ class ALLO(Base):
         self.lr_scheduler = LambdaLR(self.optimizer, lr_lambda=self.lr_lambda)
 
         # === PARAMETERS === #
-        self.state_mask = list(range(self.d)) if state_mask is None else state_mask
+        self.state_mask = (
+            list(range(self.input_dim)) if state_mask is None else state_mask
+        )
         self.batch_size = batch_size
-        self.lr_duals = 1e-2
+
+        self.lr_duals = 1e-3
         self.lr_dual_velocities = 0.1
-        self.lr_barrier_coeff = 1e-2
+        self.lr_barrier_coeff = 1.0
         self.use_barrier_for_duals = 0
         self.min_duals = 0.0
         self.max_duals = 100.0
         self.barrier_increase_rate = 0.1
         self.min_barrier_coefs = 0
-        self.max_barrier_coefs = 10
+        self.max_barrier_coefs = 100
+
         self.discount_sampling_factor = discount_sampling_factor
 
         self.permutation_array = np.arange(self.d)
@@ -125,7 +130,6 @@ class ALLO(Base):
             discount=self.discount_sampling_factor,
             device=self.device,
         )
-
         phi1 = self(s1)  # [B, d]
         phi2 = self(s2)
 
@@ -180,7 +184,7 @@ class ALLO(Base):
         # Optimize
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=100.0)
+        # torch.nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=100.0)
         grad_dict, norm_dict = self.get_grad_weight_norm()
         self.optimizer.step()
 

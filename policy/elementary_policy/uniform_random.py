@@ -59,4 +59,5 @@ class UniformRandom(Base):
         }
 
     def learn(self, batch):
-        pass
+        # no loss dict, no update time
+        return {}, 0.0  # No learning for random policy

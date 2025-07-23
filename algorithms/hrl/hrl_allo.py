@@ -13,9 +13,9 @@ from utils.intrinsic_rewards import IntrinsicRewardFunctions
 from utils.sampler import HLSampler, OnlineSampler
 
 
-class HRL(nn.Module):
+class HRL_ALLO(nn.Module):
     def __init__(self, env, logger, writer, args):
-        super(HRL, self).__init__()
+        super(HRL_ALLO, self).__init__()
 
         # === Parameter saving === #
         self.env = env

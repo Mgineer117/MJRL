@@ -15,6 +15,9 @@ class MLP(nn.Module):
         device=torch.device("cpu"),
     ) -> None:
         super().__init__()
+        self.input_dim = input_dim
+        self.hidden_dims = hidden_dims
+
         hidden_dims = [input_dim] + hidden_dims
         model = []
 

@@ -7,37 +7,37 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from policy.layers.base import Base
-from policy.layers.td3_network import TD3_Actor, TD3_Actor_From_Critic, TD3_Critic
+from policy.layers.sac_network import SAC_Actor, SAC_Critic
 from utils.replay_buffer import ReplayBuffer
 from utils.rl import estimate_advantages
 
 
-class DDPG_Learner(Base):
+class SAC_Learner(Base):
     def __init__(
         self,
-        actor: TD3_Actor | TD3_Actor_From_Critic,
-        critic: TD3_Critic,
+        actor: SAC_Actor,
+        critic: SAC_Critic,
         nupdates: int,
         actor_lr: float = 3e-4,
         critic_lr: float = 5e-4,
-        policy_freq: int = 2,
         gamma: float = 0.99,
         tau: float = 0.005,
+        entropy_scaler: float = 1e-3,
         is_discrete: bool = False,
         device=torch.device("cpu"),
     ):
         super().__init__(device=device)
 
         # constants
-        self.name = "DDPG"
+        self.name = "SAC"
         self.device = device
 
         self.state_dim = actor.state_dim
         self.action_dim = actor.action_dim
 
-        self.policy_freq = policy_freq
         self.gamma = gamma
         self.tau = tau
+        self.entropy_scaler = entropy_scaler
         self.nupdates = nupdates
 
         # trainable networks
@@ -47,7 +47,6 @@ class DDPG_Learner(Base):
             # actor share the same memory with critic
             # since actor is not trainable but relies on the critic1
             self.actor = actor
-            self.actor_target = actor
 
             self.critic1 = critic
             self.critic2 = deepcopy(critic)
@@ -63,7 +62,6 @@ class DDPG_Learner(Base):
             )
         else:
             self.actor = actor
-            self.actor_target = deepcopy(actor)
 
             self.critic1 = critic
             self.critic2 = deepcopy(critic)
@@ -212,36 +210,34 @@ class DDPG_Learner(Base):
         loss_dict.update(critic_norm_dict)
 
         ### === ACTOR UPDATE === ###
-        if self.steps % self.policy_freq == 0:
-            actor_loss = self.actor_loss(states)
+        actor_loss = self.actor_loss(states)
 
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
-            # torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=10.0)
-            actor_grad_dict = self.compute_gradient_norm(
-                [self.actor],
-                ["actor"],
-                dir=f"{self.name}",
-                device=self.device,
-            )
-            actor_norm_dict = self.compute_weight_norm(
-                [self.actor, self.actor_target],
-                ["actor", "actor_target"],
-                dir=f"{self.name}",
-                device=self.device,
-            )
-            self.actor_optimizer.step()
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        # torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=10.0)
+        actor_grad_dict = self.compute_gradient_norm(
+            [self.actor],
+            ["actor"],
+            dir=f"{self.name}",
+            device=self.device,
+        )
+        actor_norm_dict = self.compute_weight_norm(
+            [self.actor],
+            ["actor"],
+            dir=f"{self.name}",
+            device=self.device,
+        )
+        self.actor_optimizer.step()
 
-            loss_dict[f"{self.name}/actor_loss"] = actor_loss.item()
-            loss_dict.update(actor_grad_dict)
-            loss_dict.update(actor_norm_dict)
+        loss_dict[f"{self.name}/actor_loss"] = actor_loss.item()
+        loss_dict.update(actor_grad_dict)
+        loss_dict.update(actor_norm_dict)
 
         self.steps += 1
 
         ### === POLYAK AVERAGING === ###
         self._update_target_network(self.critic_target1, self.critic1, self.tau)
         self._update_target_network(self.critic_target2, self.critic2, self.tau)
-        self._update_target_network(self.actor_target, self.actor, self.tau)
 
         # Cleanup
         del states, actions, next_states, rewards, terminals
@@ -255,11 +251,14 @@ class DDPG_Learner(Base):
         self,
         states: torch.Tensor,
     ):
-        a, _ = self.actor(states, deterministic=True)
-        critic_states = torch.cat([states, a], dim=-1)
+        actions, infos = self.actor(states)
+        critic_states = torch.cat([states, actions], dim=-1)
         # with torch.no_grad():
         Q1 = self.critic1(critic_states)
-        actor_loss = -Q1.mean()  # Deterministic TD3-style
+        Q2 = self.critic2(critic_states)
+        Q = torch.min(Q1, Q2)
+
+        actor_loss = (self.entropy_scaler * infos["logprobs"] - Q).mean()
 
         return actor_loss
 
@@ -272,12 +271,14 @@ class DDPG_Learner(Base):
         terminals: torch.Tensor,
     ):
         with torch.no_grad():
-            next_actions, _ = self.actor_target(next_states, deterministic=False)
+            next_actions, infos = self.actor(next_states)
             critic_next_states = torch.cat([next_states, next_actions], dim=-1)
 
             target_Q1 = self.critic_target1(critic_next_states)
             target_Q2 = self.critic_target2(critic_next_states)
+
             target_Q = torch.min(target_Q1, target_Q2)
+            target_Q = target_Q - self.entropy_scaler * infos["logprobs"]
             target_Q = (rewards + (1 - terminals) * self.gamma * target_Q).detach()
 
         critic_states = torch.cat([states, actions], dim=-1)

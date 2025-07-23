@@ -1,15 +1,15 @@
 import torch
 import torch.nn as nn
 
-from policy.ddpg_learner import DDPG_Learner
-from policy.layers.td3_network import TD3_Actor, TD3_Actor_From_Critic, TD3_Critic
+from policy.sac_learner import SAC_Learner
+from policy.layers.sac_network import SAC_Actor, SAC_Critic
 from trainer.offpolicy_trainer import OffPolicyTrainer
 from utils.replay_buffer import ReplayBuffer
 
 
-class DDPG_Algorithm(nn.Module):
+class SAC_Algorithm(nn.Module):
     def __init__(self, env, logger, writer, args):
-        super(DDPG_Algorithm, self).__init__()
+        super(SAC_Algorithm, self).__init__()
 
         # === Parameter saving === #
         self.env = env
@@ -41,40 +41,42 @@ class DDPG_Algorithm(nn.Module):
 
     def define_policy(self):
         if self.args.is_discrete:
-            print(
-                "[Warning] DDPG is not designed for discrete action space."
-                "The discrete implementation of DDPG uses underestimated Q-values of twin-critics to make decisions."
-                "We recommend using DQN or SAC for discrete action spaces."
+            # print(
+            #     "[Warning] DDPG is not designed for discrete action space."
+            #     "The discrete implementation of DDPG uses underestimated Q-values of twin-critics to make decisions."
+            #     "We recommend using DQN or SAC for discrete action spaces."
+            # )
+            # critic = TD3_Critic(
+            #     self.args.state_dim,
+            #     self.args.action_dim,
+            #     hidden_dim=self.args.critic_fc_dim,
+            # )
+            # # actor is a wrapper that chooses over critic
+            # actor = TD3_Actor_From_Critic(critic)
+            raise NotImplementedError(
+                "SAC is not designed for discrete action space. "
+                "Please use DQN or TD3 for discrete action spaces."
             )
-            critic = TD3_Critic(
-                self.args.state_dim,
-                self.args.action_dim,
-                hidden_dim=self.args.critic_fc_dim,
-            )
-            # actor is a wrapper that chooses over critic
-            actor = TD3_Actor_From_Critic(critic)
         else:
-            actor = TD3_Actor(
+            actor = SAC_Actor(
                 input_dim=self.args.state_dim,
                 hidden_dim=self.args.actor_fc_dim,
                 action_dim=self.args.action_dim,
                 action_space=self.env.action_space,
-                action_noise_coeff=self.args.action_noise_coeff,
                 device=self.args.device,
             )
-            critic = TD3_Critic(
+            critic = SAC_Critic(
                 self.args.state_dim,
                 self.args.action_dim,
                 hidden_dim=self.args.critic_fc_dim,
             )
 
-        self.policy = DDPG_Learner(
+        self.policy = SAC_Learner(
             actor=actor,
             critic=critic,
             nupdates=self.args.nupdates,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
-            policy_freq=self.args.policy_freq,
             gamma=self.args.gamma,
             tau=self.args.tau,
             is_discrete=self.args.is_discrete,
