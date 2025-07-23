@@ -201,7 +201,7 @@ class HRLOnPolicyTrainer(BaseTrainer):
         eval_idx = 0
         init_timesteps = current_step
         total_tiemesteps = init_timesteps + self.hl_timesteps
-        self.hl_policy.policies = self.policies
+        self.hl_policy.update_options(self.policies)
         with tqdm(
             total=total_tiemesteps,
             initial=init_timesteps,
@@ -619,14 +619,13 @@ class HRLOffPolicyTrainer(HRLOnPolicyTrainer):
                             eval_idx += 1
 
         ### === CLEAR PREVIOUS REPLAY BUFFER === ###
-        for replay_buffer in self.replay_buffers:
-            replay_buffer.clear()
+        del self.replay_buffers
 
         # assign trained option policies
         eval_idx = 0
         init_timesteps = current_step
         total_tiemesteps = init_timesteps + self.hl_timesteps
-        self.hl_policy.policies = self.policies
+        self.hl_policy.update_options(self.policies)
         with tqdm(
             total=total_tiemesteps,
             initial=init_timesteps,
@@ -636,65 +635,118 @@ class HRLOffPolicyTrainer(HRLOnPolicyTrainer):
                 current_step = pbar.n + 1  # + 1 to avoid zero division
                 self.hl_policy.train()
 
-                batch, sample_time = self.hl_sampler.collect_samples(
-                    env=self.env, policy=self.hl_policy, seed=self.seed
-                )
-                loss_dict, timesteps, update_time = self.hl_policy.learn(batch)
+                # Env initialization
+                state, infos = self.env.reset(seed=self.seed)
 
-                # add timesteps
-                current_step += timesteps
-                pbar.update(timesteps)
-
-                # Calculate expected remaining time
-                elapsed_time = time.time() - start_time
-                avg_time_per_iter = elapsed_time / current_step
-                remaining_time = avg_time_per_iter * (total_tiemesteps - current_step)
-
-                # Update environment steps and calculate time metrics
-                loss_dict[f"{self.hl_policy.name}/analytics/timesteps"] = (
-                    current_step + timesteps
-                )
-                loss_dict[f"{self.hl_policy.name}/analytics/sample_time"] = sample_time
-                loss_dict[f"{self.hl_policy.name}/analytics/update_time"] = update_time
-                loss_dict[f"{self.hl_policy.name}/analytics/remaining_time (hr)"] = (
-                    remaining_time / 3600
-                )  # Convert to hours
-
-                self.write_log(loss_dict, step=current_step)
-
-                #### EVALUATIONS ####
-                if current_step >= self.hl_eval_interval * (eval_idx + 1):
-                    ### Eval Loop ###
-                    self.hl_policy.eval()
-                    eval_idx += 1
-
-                    eval_dict, running_video = self.hl_evaluate()
-
-                    # Manual logging
-                    if self.hl_policy.state_visitation is not None:
-                        visitation_map = self.hl_policy.state_visitation
-                        vmin, vmax = visitation_map.min(), visitation_map.max()
-                        visitation_map = (visitation_map - vmin) / (vmax - vmin + 1e-8)
-                        visitation_map = self.visitation_to_rgb(visitation_map)
-                        self.write_image(
-                            image=visitation_map,
-                            step=current_step,
-                            logdir="Image",
-                            name="visitation map",
+                for t in range(self.episode_len):
+                    with torch.no_grad():
+                        [option_idx, a], metaData = self.hl_policy(
+                            state, None, deterministic=True
+                        )
+                        a = (
+                            a.cpu().numpy().squeeze(0)
+                            if a.shape[-1] > 1
+                            else [a.item()]
                         )
 
-                    self.write_log(eval_dict, step=current_step, eval_log=True)
-                    self.write_video(
-                        running_video,
-                        step=current_step,
-                        logdir=f"Video",
-                        name="running_video",
-                    )
+                    if metaData["is_option"]:
+                        option_termination = False
+                        for i in range(10):
+                            next_state, rew, term, trunc, infos = self.env.step(a)
+                            done = term or trunc
+                            ep_reward.append(rew)
 
-                    self.last_return_mean.append(eval_dict[f"eval/return_mean"])
-                    self.last_return_std.append(eval_dict[f"eval/return_std"])
+                            if done or option_termination:
+                                break
+                            else:
+                                with torch.no_grad():
+                                    [_, a], optionMetaData = self.hl_policy(
+                                        next_state,
+                                        option_idx=option_idx,
+                                        deterministic=True,
+                                    )
+                                    a = (
+                                        a.cpu().numpy().squeeze(0)
+                                        if a.shape[-1] > 1
+                                        else [a.item()]
+                                    )
+                                option_termination = optionMetaData[
+                                    "option_termination"
+                                ]
+                    else:
+                        # env stepping
+                        next_state, rew, term, trunc, infos = self.env.step(a)
+                        done = term or trunc
+                        ep_reward.append(rew)
 
-                    self.save_model(current_step, self.hl_policy, "hl_policy")
+                        self.hl_replay_buffer.append(
+                            state, action, next_state, reward, done
+                        )
+
+                    # === UPDATE POLICY === #
+                    if current_step >= init_timesteps + self.warmup_samples:
+                        loss_dict, update_time = self.hl_policy.learn(
+                            self.hl_replay_buffer
+                        )
+                        loss_dict[f"{self.hl_policy.name}/analytics/update_time"] = (
+                            update_time
+                        )
+
+                        self.write_log(loss_dict, step=current_step)
+
+                    # === UPDATE STATE === #
+                    state = next_state
+                    pbar.update(1)
+
+                    if done:
+                        if current_step >= init_timesteps + self.warmup_samples:
+                            return_dict = {
+                                f"{self.hl_policy.name}/return": self.discounted_return(
+                                    ep_reward, self.args.gamma
+                                ),
+                            }
+                            self.write_log(return_dict, step=current_step)
+                        break
+
+                #### EVALUATIONS ####
+                if current_step >= init_timesteps + self.warmup_samples:
+                    if (
+                        current_step - (init_timesteps + self.warmup_samples)
+                        >= self.hl_eval_interval * eval_idx
+                    ):
+                        ### Eval Loop ###
+                        self.hl_policy.eval()
+                        eval_idx += 1
+
+                        eval_dict, running_video = self.hl_evaluate()
+
+                        # Manual logging
+                        if self.hl_policy.state_visitation is not None:
+                            visitation_map = self.hl_policy.state_visitation
+                            vmin, vmax = visitation_map.min(), visitation_map.max()
+                            visitation_map = (visitation_map - vmin) / (
+                                vmax - vmin + 1e-8
+                            )
+                            visitation_map = self.visitation_to_rgb(visitation_map)
+                            self.write_image(
+                                image=visitation_map,
+                                step=current_step,
+                                logdir="Image",
+                                name="visitation map",
+                            )
+
+                        self.write_log(eval_dict, step=current_step, eval_log=True)
+                        self.write_video(
+                            running_video,
+                            step=current_step,
+                            logdir=f"Video",
+                            name="running_video",
+                        )
+
+                        self.last_return_mean.append(eval_dict[f"eval/return_mean"])
+                        self.last_return_std.append(eval_dict[f"eval/return_std"])
+
+                        self.save_model(current_step, self.hl_policy, "hl_policy")
 
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()

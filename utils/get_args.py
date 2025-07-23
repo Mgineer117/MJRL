@@ -92,9 +92,9 @@ def get_args():
 
     # === HRL PARAMETER === #
     parser.add_argument(
-        "--option-algorithm",
+        "--hrl-base-algorithm",
         type=str,
-        default="sac",
+        default="ppo",
         help="Number of samples for training.",
     )
     parser.add_argument(

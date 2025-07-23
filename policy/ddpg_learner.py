@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from policy.layers.base import Base
-from policy.layers.td3_network import TD3_Actor, TD3_Actor_From_Critic, TD3_Critic
+from policy.layers.td3_networks import TD3_Actor, TD3_Actor_From_Critic, TD3_Critic
 from utils.replay_buffer import ReplayBuffer
 from utils.rl import estimate_advantages
 

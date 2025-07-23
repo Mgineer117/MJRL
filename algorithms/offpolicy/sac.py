@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from policy.sac_learner import SAC_Learner
-from policy.layers.sac_network import SAC_Actor, SAC_Critic
+from policy.layers.sac_networks import SAC_Actor, SAC_Critic
 from trainer.offpolicy_trainer import OffPolicyTrainer
 from utils.replay_buffer import ReplayBuffer
 

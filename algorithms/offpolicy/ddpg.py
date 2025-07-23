@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from policy.ddpg_learner import DDPG_Learner
-from policy.layers.td3_network import TD3_Actor, TD3_Actor_From_Critic, TD3_Critic
+from policy.layers.td3_networks import TD3_Actor, TD3_Actor_From_Critic, TD3_Critic
 from trainer.offpolicy_trainer import OffPolicyTrainer
 from utils.replay_buffer import ReplayBuffer
 

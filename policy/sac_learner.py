@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from policy.layers.base import Base
-from policy.layers.sac_network import SAC_Actor, SAC_Critic
+from policy.layers.sac_networks import SAC_Actor, SAC_Critic
 from utils.replay_buffer import ReplayBuffer
 from utils.rl import estimate_advantages
 
