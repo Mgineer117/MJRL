@@ -38,7 +38,6 @@ class Base:
             rewards=np.full((batch_size, 1), np.nan, dtype=np.float32),
             terminals=np.full((batch_size, 1), np.nan, dtype=np.float32),
             logprobs=np.full((batch_size, 1), np.nan, dtype=np.float32),
-            entropys=np.full((batch_size, 1), np.nan, dtype=np.float32),
         )
         return data
 
@@ -205,9 +204,6 @@ class OnlineSampler(Base):
                 data["logprobs"][current_time + t] = (
                     metaData["logprobs"].cpu().detach().numpy()
                 )
-                data["entropys"][current_time + t] = (
-                    metaData["entropy"].cpu().detach().numpy()
-                )
 
                 if done:
                     current_time += t + 1
@@ -328,9 +324,6 @@ class HLSampler(OnlineSampler):
                 data["terminals"][current_time + t] = done
                 data["logprobs"][current_time + t] = (
                     metaData["logprobs"].cpu().detach().numpy()
-                )
-                data["entropys"][current_time + t] = (
-                    metaData["entropy"].cpu().detach().numpy()
                 )
 
                 if done:

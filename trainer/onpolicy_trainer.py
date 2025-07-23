@@ -85,7 +85,7 @@ class OnPolicyTrainer(BaseTrainer):
                 self.write_log(loss_dict, step=step)
 
                 #### EVALUATIONS ####
-                if step >= self.eval_interval * (eval_idx + 1):
+                if step >= self.eval_interval * eval_idx:
                     ### Eval Loop
                     self.policy.eval()
                     eval_idx += 1

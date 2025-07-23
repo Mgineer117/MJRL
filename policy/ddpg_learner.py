@@ -94,7 +94,6 @@ class DDPG_Learner(Base):
         return a, {
             "probs": metaData["probs"],
             "logprobs": metaData["logprobs"],
-            "entropy": metaData["entropy"],
             "dist": metaData["dist"],
         }
 
@@ -131,8 +130,8 @@ class DDPG_Learner(Base):
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.critic1.parameters(), max_norm=1.0)
-        torch.nn.utils.clip_grad_norm_(self.critic2.parameters(), max_norm=1.0)
+        # torch.nn.utils.clip_grad_norm_(self.critic1.parameters(), max_norm=1.0)
+        # torch.nn.utils.clip_grad_norm_(self.critic2.parameters(), max_norm=1.0)
         critic_grad_dict = self.compute_gradient_norm(
             [self.critic1, self.critic2],
             ["critic1", "critic2"],

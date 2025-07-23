@@ -87,7 +87,6 @@ class HRL_Learner(Base):
             metaData = {
                 "probs": torch.tensor(np.nan).to(self.device),
                 "logprobs": torch.tensor(np.nan).to(self.device),
-                "entropy": torch.tensor(np.nan).to(self.device),
                 "dist": torch.tensor(np.nan).to(self.device),
             }
 
@@ -107,7 +106,6 @@ class HRL_Learner(Base):
             "logits": logits,
             "probs": metaData["probs"],
             "logprobs": metaData["logprobs"],
-            "entropy": metaData["entropy"],
             "dist": metaData["dist"],
             "is_option": is_option,
             "option_termination": option_termination,

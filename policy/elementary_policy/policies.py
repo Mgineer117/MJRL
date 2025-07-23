@@ -49,7 +49,8 @@ class LeftPolicy(Base):
         }
 
     def learn(self, batch):
-        pass
+        # no loss dict, no update time
+        return {}, 0.0  # No learning
 
 
 class UpPolicy(Base):
@@ -93,7 +94,8 @@ class UpPolicy(Base):
         }
 
     def learn(self, batch):
-        pass
+        # no loss dict, no update time
+        return {}, 0.0  # No learning
 
 
 class RightPolicy(Base):
@@ -137,7 +139,8 @@ class RightPolicy(Base):
         }
 
     def learn(self, batch):
-        pass
+        # no loss dict, no update time
+        return {}, 0.0  # No learning
 
 
 class DownPolicy(Base):
@@ -181,7 +184,8 @@ class DownPolicy(Base):
         }
 
     def learn(self, batch):
-        pass
+        # no loss dict, no update time
+        return {}, 0.0  # No learning
 
 
 class StayPolicy(Base):
@@ -225,4 +229,5 @@ class StayPolicy(Base):
         }
 
     def learn(self, batch):
-        pass
+        # no loss dict, no update time
+        return {}, 0.0  # No learning

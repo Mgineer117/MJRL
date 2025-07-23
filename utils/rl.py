@@ -27,11 +27,14 @@ def call_env(args, verbose=True, spawn_agent_random: bool = False):
     args.episode_len = env.spec.max_episode_steps
 
     # === DECIDE THE PROPER BATCH SIZE BASED ON THE EPISODE LENGTH === #
+    # if args.algo_name in ("ppo", "trpo", "psne", "drndppo"):
     if args.is_discrete:
         args.batch_size = 20 * args.episode_len
     else:
         args.batch_size = 30 * args.episode_len
     args.minibatch_size = args.batch_size // args.num_minibatch
+    # else:
+    # args.batch_size = 128
 
     # === COMPUTE THE TOTAL NUMBER OF EPOCHS FOR LR SCHEDULER === #
     args.nupdates = args.timesteps // args.batch_size

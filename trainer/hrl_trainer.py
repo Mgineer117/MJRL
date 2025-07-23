@@ -31,8 +31,8 @@ def compare_weights(policy1, policy2):
     return diffs
 
 
-# model-free policy trainer
-class HRLTrainer(BaseTrainer):
+# on-policy trainer
+class HRLOnPolicyTrainer(BaseTrainer):
     def __init__(
         self,
         env: gym.Env,
@@ -45,12 +45,6 @@ class HRLTrainer(BaseTrainer):
         writer: SummaryWriter,
         init_timesteps: int,
         args,
-        # timesteps: int = 1e6,
-        # hl_timesteps: int = 1e6,
-        # log_interval: int = 100,
-        # eval_num: int = 10,
-        # rendering: bool = False,
-        # seed: int = 0,
     ) -> None:
         self.env = env
         self.hl_policy = hl_policy
@@ -58,7 +52,10 @@ class HRLTrainer(BaseTrainer):
 
         self.intrinsic_reward_fn = intrinsic_reward_fn
 
-        self.num_options = args.num_options
+        self.trainable_options = [
+            i for i, policy in enumerate(self.policies) if hasattr(policy, "actor")
+        ]
+        self.num_trainable_options = len(self.trainable_options)
 
         self.hl_sampler = hl_sampler
         self.sampler = sampler
@@ -85,6 +82,8 @@ class HRLTrainer(BaseTrainer):
         self.rendering = args.rendering
         self.seed = args.seed
 
+        self.args = args
+
     def train(self) -> dict[str, float]:
         start_time = time.time()
 
@@ -93,13 +92,15 @@ class HRLTrainer(BaseTrainer):
 
         # Train loop
         eval_idx = 0
-        total_tiemesteps = int(self.timesteps * self.num_options + self.init_timesteps)
+        total_timesteps = int(
+            self.timesteps * self.num_trainable_options + self.init_timesteps
+        )
         with tqdm(
-            total=total_tiemesteps,
+            total=total_timesteps,
             initial=self.init_timesteps,
             desc=f"{self.hl_policy.name} Training (Timesteps)",
         ) as pbar:
-            for option_idx in range(self.num_options):
+            for option_idx in self.trainable_options:
                 while pbar.n < int(
                     (option_idx + 1) * (self.timesteps + self.init_timesteps)
                 ):
@@ -114,17 +115,15 @@ class HRLTrainer(BaseTrainer):
                         env=self.env,
                         policy=policy,
                         seed=self.seed,
-                        # random_init_pos=True,
                     )
 
-                    states, next_states = batch["states"], batch["next_states"]
-                    states = torch.from_numpy(states).to(policy.device)
-                    next_states = torch.from_numpy(next_states).to(policy.device)
-
-                    intrinsic_rewards = self.intrinsic_reward_fn(
-                        states, next_states, option_idx
-                    )
-                    batch["rewards"] = intrinsic_rewards.cpu().numpy()
+                    # classify the option_idx needs intrinsic rewards
+                    if policy.name == "HRL_intrinsic_options":
+                        states, next_states = batch["states"], batch["next_states"]
+                        intrinsic_rewards = self.intrinsic_reward_fn(
+                            states, next_states, option_idx
+                        )
+                        batch["rewards"] = intrinsic_rewards.cpu().numpy()
                     loss_dict, timesteps, update_time = policy.learn(batch)
 
                     # add timesteps
@@ -135,7 +134,7 @@ class HRLTrainer(BaseTrainer):
                     elapsed_time = time.time() - start_time
                     avg_time_per_iter = elapsed_time / current_step
                     remaining_time = avg_time_per_iter * (
-                        total_tiemesteps - current_step
+                        total_timesteps - current_step
                     )
 
                     # Update environment steps and calculate time metrics
@@ -162,7 +161,7 @@ class HRLTrainer(BaseTrainer):
                     self.write_log(loss_dict, step=current_step)
 
                     #### EVALUATIONS ####
-                    if current_step >= self.eval_interval * (eval_idx + 1):
+                    if current_step >= self.eval_interval * eval_idx:
                         ### Eval Loop ###
                         self.policies[option_idx].eval()
                         eval_idx += 1
@@ -325,8 +324,8 @@ class HRLTrainer(BaseTrainer):
         return_mean, return_std = np.mean(return_list), np.std(return_list)
 
         eval_dict = {
-            f"eval/sub-policy return_mean {option_idx}": return_mean,
-            f"eval/sub-policy return_std {option_idx}": return_std,
+            f"eval/sub-policy intrinsic return_mean {option_idx}": return_mean,
+            f"eval/sub-policy intrinsic return_std {option_idx}": return_std,
         }
 
         return eval_dict, image_array
@@ -474,3 +473,234 @@ class HRLTrainer(BaseTrainer):
         )
 
         return rgb_map
+
+
+# off-policy trainer
+from utils.replay_buffer import ReplayBuffer
+
+
+class HRLOffPolicyTrainer(HRLOnPolicyTrainer):
+    def __init__(self, replay_buffer: ReplayBuffer, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+        self.random_policy = UniformRandom(
+            state_dim=self.args.state_dim,
+            action_dim=self.args.action_dim,
+            is_discrete=self.args.is_discrete,
+            device=self.args.device,
+        )
+
+        self.hl_replay_buffer = deepcopy(replay_buffer)
+        self.replay_buffers = [
+            deepcopy(replay_buffer) for _ in range(self.num_trainable_options)
+        ]
+
+        self.warmup_samples = self.args.warmup_samples
+
+    def train(self) -> dict[str, float]:
+        start_time = time.time()
+
+        self.last_return_mean = deque(maxlen=5)
+        self.last_return_std = deque(maxlen=5)
+
+        # Train loop
+        eval_idx = 0
+        total_timesteps = int(self.timesteps + self.init_timesteps)
+        with tqdm(
+            total=total_timesteps,
+            initial=self.init_timesteps,
+            desc=f"{self.hl_policy.name} Training (Timesteps)",
+        ) as pbar:
+            while pbar.n < total_timesteps:
+                current_step = pbar.n + 1  # + 1 to avoid zero division
+
+                # selecting a policy
+                if current_step < self.warmup_samples:
+                    policy = self.random_policy
+                else:
+                    # randomly select given self.policies
+                    option_idx = np.random.choice(self.trainable_options)
+                    policy = self.policies[option_idx]
+
+                ### === Env initialization === ###
+                ep_reward = []
+                state, infos = self.env.reset(seed=self.seed)
+                for t in range(self.episode_len):
+                    with torch.no_grad():
+                        a, _ = policy(state, deterministic=False)
+                        action = (
+                            a.cpu().numpy().squeeze(0)
+                            if a.shape[-1] > 1
+                            else [a.item()]
+                        )
+
+                    next_state, reward, term, trunc, infos = self.env.step(action)
+                    if t == self.episode_len - 1:
+                        # safe truncation
+                        trunc = True
+                    done = term or trunc
+
+                    # === SAVE THE DATA === #
+                    for i, idx in enumerate(self.trainable_options):
+                        if self.policies[idx].name == "HRL_intrinsic_options":
+                            reward = (
+                                self.intrinsic_reward_fn(state, next_state, idx)
+                                .cpu()
+                                .numpy()
+                            )
+
+                        if current_step >= self.warmup_samples:
+                            if idx == option_idx:
+                                # when random sampling we don't record the return
+                                ep_reward.append(reward)
+
+                        self.replay_buffers[i].append(
+                            state, action, next_state, reward, done
+                        )
+
+                    # === UPDATE STATE === #
+                    state = next_state
+                    pbar.update(1)
+
+                    # === UPDATE THE ALL POLICY === #
+                    if current_step >= self.warmup_samples:
+                        total_update_time = 0
+                        loss_dict_list = []
+                        for i, idx in enumerate(self.trainable_options):
+                            loss_dict, update_time = self.policies[idx].learn(
+                                self.replay_buffers[i]
+                            )
+                            total_update_time += update_time
+                            loss_dict_list.append(loss_dict)
+
+                        loss_dict = self.average_dict_values(loss_dict_list)
+                        loss_dict[f"{policy.name}/analytics/update_time"] = (
+                            total_update_time
+                        )
+                        self.write_log(loss_dict, step=current_step)
+
+                    if done:
+                        if current_step >= self.warmup_samples:
+                            return_dict = {
+                                f"{policy.name}/sub-policy intrinsic return {option_idx}": self.discounted_return(
+                                    ep_reward, self.args.gamma
+                                ),
+                            }
+                            self.write_log(return_dict, step=current_step)
+                        break
+
+                    #### EVALUATIONS ####
+                    if current_step >= self.warmup_samples:
+                        if (
+                            current_step - self.warmup_samples
+                            >= self.eval_interval * eval_idx
+                        ):
+                            ### Eval Loop ###
+                            for i, idx in enumerate(self.trainable_options):
+                                self.policies[idx].eval()
+
+                                eval_dict, running_video = self.evaluate(idx)
+
+                                self.write_log(eval_dict, step=current_step)
+                                self.write_video(
+                                    running_video,
+                                    step=current_step,
+                                    logdir=f"Video",
+                                    name=f"sub-policy running_video {idx}",
+                                )
+                                self.save_model(
+                                    current_step,
+                                    self.policies[idx],
+                                    f"sub-policy {idx}",
+                                )
+
+                                self.policies[idx].train()
+
+                            eval_idx += 1
+
+        ### === CLEAR PREVIOUS REPLAY BUFFER === ###
+        for replay_buffer in self.replay_buffers:
+            replay_buffer.clear()
+
+        # assign trained option policies
+        eval_idx = 0
+        init_timesteps = current_step
+        total_tiemesteps = init_timesteps + self.hl_timesteps
+        self.hl_policy.policies = self.policies
+        with tqdm(
+            total=total_tiemesteps,
+            initial=init_timesteps,
+            desc=f"{self.hl_policy.name} Training (Timesteps)",
+        ) as pbar:
+            while pbar.n < total_tiemesteps:
+                current_step = pbar.n + 1  # + 1 to avoid zero division
+                self.hl_policy.train()
+
+                batch, sample_time = self.hl_sampler.collect_samples(
+                    env=self.env, policy=self.hl_policy, seed=self.seed
+                )
+                loss_dict, timesteps, update_time = self.hl_policy.learn(batch)
+
+                # add timesteps
+                current_step += timesteps
+                pbar.update(timesteps)
+
+                # Calculate expected remaining time
+                elapsed_time = time.time() - start_time
+                avg_time_per_iter = elapsed_time / current_step
+                remaining_time = avg_time_per_iter * (total_tiemesteps - current_step)
+
+                # Update environment steps and calculate time metrics
+                loss_dict[f"{self.hl_policy.name}/analytics/timesteps"] = (
+                    current_step + timesteps
+                )
+                loss_dict[f"{self.hl_policy.name}/analytics/sample_time"] = sample_time
+                loss_dict[f"{self.hl_policy.name}/analytics/update_time"] = update_time
+                loss_dict[f"{self.hl_policy.name}/analytics/remaining_time (hr)"] = (
+                    remaining_time / 3600
+                )  # Convert to hours
+
+                self.write_log(loss_dict, step=current_step)
+
+                #### EVALUATIONS ####
+                if current_step >= self.hl_eval_interval * (eval_idx + 1):
+                    ### Eval Loop ###
+                    self.hl_policy.eval()
+                    eval_idx += 1
+
+                    eval_dict, running_video = self.hl_evaluate()
+
+                    # Manual logging
+                    if self.hl_policy.state_visitation is not None:
+                        visitation_map = self.hl_policy.state_visitation
+                        vmin, vmax = visitation_map.min(), visitation_map.max()
+                        visitation_map = (visitation_map - vmin) / (vmax - vmin + 1e-8)
+                        visitation_map = self.visitation_to_rgb(visitation_map)
+                        self.write_image(
+                            image=visitation_map,
+                            step=current_step,
+                            logdir="Image",
+                            name="visitation map",
+                        )
+
+                    self.write_log(eval_dict, step=current_step, eval_log=True)
+                    self.write_video(
+                        running_video,
+                        step=current_step,
+                        logdir=f"Video",
+                        name="running_video",
+                    )
+
+                    self.last_return_mean.append(eval_dict[f"eval/return_mean"])
+                    self.last_return_std.append(eval_dict[f"eval/return_std"])
+
+                    self.save_model(current_step, self.hl_policy, "hl_policy")
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+        self.logger.print(
+            f"Total {self.hl_policy.name} training time: {(time.time() - start_time) / 3600} hours"
+        )
+
+        return current_step

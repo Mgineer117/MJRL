@@ -75,13 +75,11 @@ class PPO_Actor(Base):
 
         logprobs = dist.log_prob(a).unsqueeze(-1).sum(1)
         probs = torch.exp(logprobs)
-        entropy = dist.entropy().sum(1)
 
         return a, {
             "dist": dist,
             "probs": probs,
             "logprobs": logprobs,
-            "entropy": entropy,
         }
 
     def discrete_forward(
@@ -96,7 +94,6 @@ class PPO_Actor(Base):
             dist = None
             logprobs = torch.zeros_like(logits[:, 0:1])
             probs = torch.ones_like(logprobs)
-            entropy = torch.zeros_like(logprobs)
         else:
             dist = Categorical(logits=logits)
             a = dist.sample()
@@ -104,14 +101,11 @@ class PPO_Actor(Base):
             logprobs = dist.log_prob(a).unsqueeze(-1)
             probs = torch.exp(logprobs)
 
-            entropy = dist.entropy()
-
         a = F.one_hot(a, num_classes=logits.size(-1))
         return a, {
             "dist": dist,
             "probs": probs,
             "logprobs": logprobs,
-            "entropy": entropy,
         }
 
     def log_prob(self, dist: torch.distributions, actions: torch.Tensor):

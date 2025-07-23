@@ -71,7 +71,6 @@ class TD3_Actor(Base):
             "dist": self._dummy,
             "probs": self._dummy,
             "logprobs": self._dummy,
-            "entropy": self._dummy,
         }
 
 
@@ -179,5 +178,4 @@ class TD3_Actor_From_Critic(nn.Module):
             "dist": self._dummy,
             "probs": self._dummy,
             "logprobs": self._dummy,
-            "entropy": self._dummy,
         }

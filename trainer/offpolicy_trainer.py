@@ -29,10 +29,10 @@ class OffPolicyTrainer(BaseTrainer):
     ) -> None:
         self.env = env
         self.random_policy = UniformRandom(
-            state_dim=policy.actor.state_dim,
-            action_dim=policy.actor.action_dim,
-            is_discrete=policy.actor.is_discrete,
-            device=policy.device,
+            state_dim=args.state_dim,
+            action_dim=args.action_dim,
+            is_discrete=args.is_discrete,
+            device=args.device,
         )
         self.policy = policy
         self.eval_num = args.eval_num
@@ -47,7 +47,9 @@ class OffPolicyTrainer(BaseTrainer):
         self.warmup_samples = args.warmup_samples
 
         self.log_interval = args.log_interval
-        self.eval_interval = int(self.timesteps / self.log_interval)
+        self.eval_interval = int(
+            (self.timesteps - self.warmup_samples) / self.log_interval
+        )
 
         # initialize the essential training components
         self.last_max_return_mean = -1e10
@@ -55,6 +57,8 @@ class OffPolicyTrainer(BaseTrainer):
 
         self.rendering = args.rendering
         self.seed = args.seed
+
+        self.args = args
 
     def train(self) -> dict[str, float]:
         start_time = time.time()
@@ -101,31 +105,35 @@ class OffPolicyTrainer(BaseTrainer):
 
                     if current_step >= self.warmup_samples:
                         loss_dict, update_time = policy.learn(self.replay_buffer)
+                        loss_dict[f"{self.policy.name}/analytics/timesteps"] = (
+                            current_step
+                        )
+                        loss_dict[f"{self.policy.name}/analytics/update_time"] = (
+                            update_time
+                        )
+
                         self.write_log(loss_dict, step=current_step)
 
                     state = next_state
 
-                    current_step += 1
                     pbar.update(1)
 
                     if done:
                         if current_step >= self.warmup_samples:
                             return_dict = {
                                 f"{self.policy.name}/return": self.discounted_return(
-                                    ep_reward, self.policy.gamma
+                                    ep_reward, self.args.gamma
                                 ),
                             }
                             self.write_log(return_dict, step=current_step)
                         break
 
                 if current_step >= self.warmup_samples:
-                    # Update environment steps and calculate time metrics
-                    loss_dict[f"{self.policy.name}/analytics/timesteps"] = current_step
-                    loss_dict[f"{self.policy.name}/analytics/update_time"] = update_time
-                    self.write_log(loss_dict, step=current_step)
-
                     #### EVALUATIONS ####
-                    if current_step >= self.eval_interval * (eval_idx + 1):
+                    if (
+                        current_step - self.warmup_samples
+                        >= self.eval_interval * eval_idx
+                    ):
                         ### Eval Loop
                         self.policy.eval()
                         eval_idx += 1
@@ -160,8 +168,7 @@ class OffPolicyTrainer(BaseTrainer):
 
                         self.save_model(current_step)
 
-                torch.cuda.empty_cache()
-
+        torch.cuda.empty_cache()
         self.logger.print(
             f"Total {self.policy.name} training time: {(time.time() - start_time) / 3600} hours"
         )
@@ -169,7 +176,7 @@ class OffPolicyTrainer(BaseTrainer):
     def evaluate(self):
         ep_buffer = []
         image_array = []
-        for num_episodes in range(self.eval_num):
+        for num_episodes in tqdm(range(self.eval_num), desc="Evaluation", leave=False):
             ep_reward = []
 
             # Env initialization
@@ -198,7 +205,6 @@ class OffPolicyTrainer(BaseTrainer):
                             ),
                         }
                     )
-
                     break
 
         return_list = [ep_info["return"] for ep_info in ep_buffer]

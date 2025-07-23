@@ -104,7 +104,6 @@ class PSNE_Learner(Base):
         return a, {
             "probs": metaData["probs"],
             "logprobs": metaData["logprobs"],
-            "entropy": metaData["entropy"],
             "dist": metaData["dist"],
         }
 

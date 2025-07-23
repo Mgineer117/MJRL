@@ -42,9 +42,9 @@ class DDPG_Algorithm(nn.Module):
     def define_policy(self):
         if self.args.is_discrete:
             print(
-                "[Warning] DDPG is not designed for discrete action space."
-                "The discrete implementation of DDPG uses underestimated Q-values of twin-critics to make decisions."
-                "We recommend using DQN or SAC for discrete action spaces."
+                "[INFO] DDPG for discrete action space is implemented using twin-critic Q-values. "
+                "[INFO] This works ok, but not widely used discrete method. "
+                "[INFO] Consider using PPO or SAC for discrete action space."
             )
             critic = TD3_Critic(
                 self.args.state_dim,

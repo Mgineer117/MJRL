@@ -40,37 +40,21 @@ class SAC_Algorithm(nn.Module):
         trainer.train()
 
     def define_policy(self):
-        if self.args.is_discrete:
-            # print(
-            #     "[Warning] DDPG is not designed for discrete action space."
-            #     "The discrete implementation of DDPG uses underestimated Q-values of twin-critics to make decisions."
-            #     "We recommend using DQN or SAC for discrete action spaces."
-            # )
-            # critic = TD3_Critic(
-            #     self.args.state_dim,
-            #     self.args.action_dim,
-            #     hidden_dim=self.args.critic_fc_dim,
-            # )
-            # # actor is a wrapper that chooses over critic
-            # actor = TD3_Actor_From_Critic(critic)
-            raise NotImplementedError(
-                "SAC is not designed for discrete action space. "
-                "Please use DQN or TD3 for discrete action spaces."
-            )
-        else:
-            actor = SAC_Actor(
-                input_dim=self.args.state_dim,
-                hidden_dim=self.args.actor_fc_dim,
-                action_dim=self.args.action_dim,
-                action_space=self.env.action_space,
-                activation=nn.ReLU(),
-                device=self.args.device,
-            )
-            critic = SAC_Critic(
-                self.args.state_dim,
-                self.args.action_dim,
-                hidden_dim=self.args.critic_fc_dim,
-            )
+        actor = SAC_Actor(
+            input_dim=self.args.state_dim,
+            hidden_dim=self.args.actor_fc_dim,
+            action_dim=self.args.action_dim,
+            action_space=self.env.action_space,
+            is_discrete=self.args.is_discrete,
+            activation=nn.ReLU(),
+            device=self.args.device,
+        )
+        critic = SAC_Critic(
+            self.args.state_dim,
+            self.args.action_dim,
+            hidden_dim=self.args.critic_fc_dim,
+            is_discrete=self.args.is_discrete,
+        )
 
         self.policy = SAC_Learner(
             actor=actor,
@@ -78,9 +62,10 @@ class SAC_Algorithm(nn.Module):
             nupdates=self.args.nupdates,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
+            K_epochs=self.args.K_epochs,
             gamma=self.args.gamma,
             tau=self.args.tau,
-            # use_entropy_target=self.args.use_entropy_target,
+            entropy_automation=self.args.entropy_automation,
             is_discrete=self.args.is_discrete,
             device=self.args.device,
         )
