@@ -34,13 +34,6 @@ class HRL_ALLO(nn.Module):
             args=args,
         )
 
-        self.args.nupdates = args.timesteps // (
-            args.minibatch_size * args.num_minibatch
-        )
-        self.args.hl_nupdates = args.hl_timesteps // (
-            args.minibatch_size * args.num_minibatch
-        )
-
         self.current_timesteps = 0
 
     def begin_training(self):
@@ -51,7 +44,7 @@ class HRL_ALLO(nn.Module):
             state_dim=self.args.state_dim,
             action_dim=len(self.policies),
             episode_len=self.args.episode_len,
-            batch_size=int(self.args.minibatch_size * self.args.num_minibatch),
+            batch_size=self.args.on_policy_batch_size,
             max_option_len=self.args.max_option_duration,
             gamma=self.args.gamma,
             verbose=False,
@@ -61,7 +54,7 @@ class HRL_ALLO(nn.Module):
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
             episode_len=self.args.episode_len,
-            batch_size=int(self.args.minibatch_size * self.args.num_minibatch),
+            batch_size=self.args.on_policy_batch_size,
             verbose=False,
         )
 
@@ -83,7 +76,7 @@ class HRL_ALLO(nn.Module):
                 state_dim=self.args.state_dim,
                 action_dim=self.args.action_dim,
                 buffer_size=self.args.buffer_size,
-                batch_size=self.args.batch_size,
+                batch_size=self.args.off_policy_batch_size,
                 device=self.args.device,
             )
             trainer = HRLOffPolicyTrainer(
@@ -120,11 +113,11 @@ class HRL_ALLO(nn.Module):
                 policy = PPO_Learner(
                     actor=actor,
                     critic=critic,
-                    nupdates=self.args.nupdates,
+                    nupdates=self.args.on_policy_nupdates,
                     actor_lr=self.args.actor_lr,
                     critic_lr=self.args.critic_lr,
                     num_minibatch=self.args.num_minibatch,
-                    minibatch_size=self.args.minibatch_size,
+                    minibatch_size=self.args.on_policy_minibatch_size,
                     eps_clip=self.args.eps_clip,
                     entropy_scaler=self.args.entropy_scaler,
                     target_kl=self.args.target_kl,
@@ -153,7 +146,7 @@ class HRL_ALLO(nn.Module):
                 policy = SAC_Learner(
                     actor=actor,
                     critic=critic,
-                    nupdates=self.args.nupdates,
+                    nupdates=self.args.off_policy_nupdates,
                     actor_lr=self.args.actor_lr,
                     critic_lr=self.args.critic_lr,
                     gamma=self.args.gamma,
@@ -227,12 +220,11 @@ class HRL_ALLO(nn.Module):
             self.hl_policy = HRL_PPO_Learner(
                 actor=actor,
                 critic=critic,
-                nupdates=self.args.hl_nupdates,
-                # num_options=self.args.num_options,
+                nupdates=self.args.on_policy_hl_nupdates,
                 actor_lr=self.args.actor_lr,
                 critic_lr=self.args.critic_lr,
                 num_minibatch=self.args.num_minibatch,
-                minibatch_size=self.args.minibatch_size,
+                minibatch_size=self.args.on_policy_minibatch_size,
                 eps_clip=self.args.eps_clip,
                 entropy_scaler=self.args.entropy_scaler,
                 target_kl=self.args.target_kl,
@@ -261,7 +253,7 @@ class HRL_ALLO(nn.Module):
             self.hl_policy = HRL_SAC_Learner(
                 actor=actor,
                 critic=critic,
-                nupdates=self.args.hl_nupdates,
+                nupdates=self.args.off_policy_hl_nupdates,
                 actor_lr=self.args.actor_lr,
                 critic_lr=self.args.critic_lr,
                 gamma=self.args.gamma,

@@ -26,7 +26,7 @@ class PSNE_Algorithm(nn.Module):
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
             episode_len=self.args.episode_len,
-            batch_size=self.args.batch_size,
+            batch_size=self.args.on_policy_batch_size,
         )
 
         trainer = OnPolicyTrainer(
@@ -53,7 +53,7 @@ class PSNE_Algorithm(nn.Module):
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
             episode_len=self.args.episode_len,
-            batch_size=self.args.batch_size,
+            batch_size=self.args.on_policy_batch_size,
             verbose=False,
         )
         batch, _ = sampler.collect_samples(
@@ -73,10 +73,10 @@ class PSNE_Algorithm(nn.Module):
             actor=actor,
             critic=critic,
             states=batch["states"],
-            nupdates=self.args.nupdates,
+            nupdates=self.args.on_policy_nupdates,
             critic_lr=self.args.critic_lr,
             entropy_scaler=self.args.entropy_scaler,
-            batch_size=self.args.batch_size,
+            batch_size=self.args.on_policy_batch_size,
             target_kl=self.args.target_kl,
             gamma=self.args.gamma,
             gae=self.args.gae,

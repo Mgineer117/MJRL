@@ -1,5 +1,4 @@
 import datetime
-import json
 import os
 import random
 
@@ -7,7 +6,12 @@ import torch
 
 import wandb
 from algorithms import *
-from utils.functions import concat_csv_columnwise_and_delete, seed_all, setup_logger
+from utils.functions import (
+    add_specific_args,
+    concat_csv_columnwise_and_delete,
+    seed_all,
+    setup_logger,
+)
 from utils.get_args import get_args
 from utils.rl import call_env
 
@@ -20,19 +24,10 @@ def run(args, seed, exp_time):
     seed_all(seed)
 
     # use env-specific parameters
-    new_args_path = f"configs/{args.env_name}.json"
-    with open(new_args_path, "r") as f:
-        new_args = json.load(f)
-
-    # Replace elements in args with those from new_args if they exist
-    for key, value in new_args.items():
-        if hasattr(args, key):
-            # if args key is None pass
-            if getattr(args, key) is None:
-                setattr(args, key, value)
 
     # get env
     env = call_env(args)
+    args = add_specific_args(args)
     logger, writer = setup_logger(args, exp_time, seed)
 
     # algorithm_map.py (or define in same script)

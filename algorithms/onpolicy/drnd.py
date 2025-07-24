@@ -27,7 +27,7 @@ class DRND_Algorithm(nn.Module):
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
             episode_len=self.args.episode_len,
-            batch_size=int(self.args.minibatch_size * self.args.num_minibatch),
+            batch_size=self.args.on_policy_batch_size,
         )
 
         trainer = OnPolicyTrainer(
@@ -69,12 +69,12 @@ class DRND_Algorithm(nn.Module):
             critic=critic,
             drnd_model=drnd_model,
             drnd_critic=drnd_critic,
-            nupdates=self.args.nupdates,
+            nupdates=self.args.on_policy_nupdates,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
             drnd_lr=3e-4,
             num_minibatch=self.args.num_minibatch,
-            minibatch_size=self.args.minibatch_size,
+            minibatch_size=self.args.on_policy_minibatch_size,
             eps_clip=self.args.eps_clip,
             entropy_scaler=self.args.entropy_scaler,
             target_kl=self.args.target_kl,

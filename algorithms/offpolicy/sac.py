@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from policy.sac_learner import SAC_Learner
 from policy.layers.sac_networks import SAC_Actor, SAC_Critic
+from policy.sac_learner import SAC_Learner
 from trainer.offpolicy_trainer import OffPolicyTrainer
 from utils.replay_buffer import ReplayBuffer
 
@@ -25,7 +25,7 @@ class SAC_Algorithm(nn.Module):
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
             buffer_size=self.args.buffer_size,
-            batch_size=self.args.batch_size,
+            batch_size=self.args.off_policy_batch_size,
             device=self.args.device,
         )
         trainer = OffPolicyTrainer(
@@ -59,7 +59,7 @@ class SAC_Algorithm(nn.Module):
         self.policy = SAC_Learner(
             actor=actor,
             critic=critic,
-            nupdates=self.args.nupdates,
+            nupdates=self.args.off_policy_nupdates,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
             K_epochs=self.args.K_epochs,

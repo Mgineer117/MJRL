@@ -1,4 +1,6 @@
 {
-    "hl_timesteps": 1e7,
-    "timesteps": 1e7
+    "hl_onpolicy_timesteps": 1e7,
+    "onpolicy_timesteps": 1e7,
+    "hl_offpolicy_timesteps": 1e6,
+    "offpolicy_timesteps": 1e6
 }

@@ -1,3 +1,4 @@
+import json
 import os
 import random
 
@@ -9,12 +10,33 @@ from torch.utils.tensorboard import SummaryWriter
 from log.wandb_logger import WandbLogger
 
 
+def add_specific_args(args):
+    # first check if the file exists
+    new_args_path = f"configs/{args.env_name}.json"
+    if not os.path.exists(new_args_path):
+        print("[INFO] Config file not found:", new_args_path)
+        return
+
+    with open(new_args_path, "r") as f:
+        new_args = json.load(f)
+
+    # Replace elements in args with those from new_args if they exist
+    for key, value in new_args.items():
+        if hasattr(args, key):
+            setattr(args, key, value)
+        else:
+            print("[Warning] Key not found in args:", key)
+            setattr(args, key, value)
+    return args
+
+
 def setup_logger(args, exp_time, seed):
     """
     setup logger both using WandB and Tensorboard
     Return: WandB logger, Tensorboard logger
     """
     # Get the current date and time
+    print(args)
     args.group = "-".join((exp_time, args.unique_id))
     args.name = "-".join(
         (args.algo_name, args.env_name, args.unique_id, "seed:" + str(seed))

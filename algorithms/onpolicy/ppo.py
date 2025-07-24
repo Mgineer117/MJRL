@@ -26,7 +26,7 @@ class PPO_Algorithm(nn.Module):
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
             episode_len=self.args.episode_len,
-            batch_size=int(self.args.minibatch_size * self.args.num_minibatch),
+            batch_size=self.args.on_policy_batch_size,
         )
 
         trainer = OnPolicyTrainer(
@@ -53,11 +53,11 @@ class PPO_Algorithm(nn.Module):
         self.policy = PPO_Learner(
             actor=actor,
             critic=critic,
-            nupdates=self.args.nupdates,
+            nupdates=self.args.on_policy_nupdates,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
             num_minibatch=self.args.num_minibatch,
-            minibatch_size=self.args.minibatch_size,
+            minibatch_size=self.args.on_policy_minibatch_size,
             eps_clip=self.args.eps_clip,
             entropy_scaler=self.args.entropy_scaler,
             target_kl=self.args.target_kl,

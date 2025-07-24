@@ -25,7 +25,7 @@ class DDPG_Algorithm(nn.Module):
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
             buffer_size=self.args.buffer_size,
-            batch_size=self.args.batch_size,
+            batch_size=self.args.off_policy_batch_size,
             device=self.args.device,
         )
         trainer = OffPolicyTrainer(
@@ -72,7 +72,7 @@ class DDPG_Algorithm(nn.Module):
         self.policy = DDPG_Learner(
             actor=actor,
             critic=critic,
-            nupdates=self.args.nupdates,
+            nupdates=self.args.off_policy_nupdates,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
             policy_freq=self.args.policy_freq,

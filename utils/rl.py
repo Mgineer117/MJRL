@@ -27,17 +27,27 @@ def call_env(args, verbose=True, spawn_agent_random: bool = False):
     args.episode_len = env.spec.max_episode_steps
 
     # === DECIDE THE PROPER BATCH SIZE BASED ON THE EPISODE LENGTH === #
-    # if args.algo_name in ("ppo", "trpo", "psne", "drndppo"):
     if args.is_discrete:
-        args.batch_size = 20 * args.episode_len
+        args.on_policy_batch_size = 20 * args.episode_len
     else:
-        args.batch_size = 30 * args.episode_len
-    args.minibatch_size = args.batch_size // args.num_minibatch
-    # else:
-    # args.batch_size = 128
+        args.on_policy_batch_size = 30 * args.episode_len
+    args.on_policy_minibatch_size = args.on_policy_batch_size // args.num_minibatch
+
+    if args.episode_len <= 100:
+        args.off_policy_batch_size = 64
+    elif args.episode_len <= 500:
+        args.off_policy_batch_size = 128
+    elif args.episode_len <= 1000:
+        args.off_policy_batch_size = 256
+    else:
+        args.off_policy_batch_size = 512
 
     # === COMPUTE THE TOTAL NUMBER OF EPOCHS FOR LR SCHEDULER === #
-    args.nupdates = args.timesteps // args.batch_size
+    args.on_policy_nupdates = args.timesteps // args.on_policy_batch_size
+    args.off_policy_nupdates = args.timesteps // args.off_policy_batch_size
+
+    args.on_policy_hl_nupdates = args.hl_timesteps // args.on_policy_batch_size
+    args.off_policy_hl_nupdates = args.hl_timesteps // args.off_policy_batch_size
 
     if args.is_discrete:
         # it argmax the onehot

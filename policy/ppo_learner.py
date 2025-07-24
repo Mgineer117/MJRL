@@ -179,7 +179,6 @@ class PPO_Learner(Base):
             f"{self.name}/analytics/clip_fraction": np.mean(clip_fractions),
             f"{self.name}/analytics/klDivergence": target_kl[-1],
             f"{self.name}/analytics/K-epoch": k + 1,
-            f"{self.name}/analytics/avg_rewards": torch.mean(rewards).item(),
             f"{self.name}/analytics/policy_lr": self.optimizer.param_groups[0]["lr"],
             f"{self.name}/analytics/critic_lr": self.optimizer.param_groups[1]["lr"],
         }
