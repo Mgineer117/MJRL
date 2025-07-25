@@ -36,7 +36,7 @@ class OnPolicyTrainer(BaseTrainer):
 
         # training parameters
         self.episode_len = args.episode_len
-        self.timesteps = args.timesteps
+        self.timesteps = args.onpolicy_timesteps
 
         self.log_interval = args.log_interval
         self.eval_interval = int(self.timesteps / self.log_interval)
@@ -61,19 +61,22 @@ class OnPolicyTrainer(BaseTrainer):
             desc=f"{self.policy.name} Training (Timesteps)",
         ) as pbar:
             while pbar.n < self.timesteps:
-                step = pbar.n + 1  # + 1 to avoid zero division
                 self.policy.train()
+                current_step = pbar.n + 1  # + 1 to avoid zero division
+                fraction = current_step / self.timesteps
 
                 batch, sample_time = self.sampler.collect_samples(
                     env=self.env, policy=self.policy, seed=self.seed
                 )
-                loss_dict, timesteps, update_time = self.policy.learn(batch)
+                loss_dict, timesteps, update_time = self.policy.learn(batch, fraction)
 
                 # Calculate expected remaining time
                 pbar.update(timesteps)
 
                 # Update environment steps and calculate time metrics
-                loss_dict[f"{self.policy.name}/analytics/timesteps"] = step + timesteps
+                loss_dict[f"{self.policy.name}/analytics/timesteps"] = (
+                    current_step + timesteps
+                )
                 loss_dict[f"{self.policy.name}/analytics/sample_time"] = sample_time
                 loss_dict[f"{self.policy.name}/analytics/update_time"] = update_time
                 loss_dict[f"{self.policy.name}/analytics/return"] = (
@@ -82,10 +85,10 @@ class OnPolicyTrainer(BaseTrainer):
                     )
                 )
 
-                self.write_log(loss_dict, step=step)
+                self.write_log(loss_dict, step=current_step)
 
                 #### EVALUATIONS ####
-                if step >= self.eval_interval * eval_idx:
+                if current_step >= self.eval_interval * eval_idx:
                     ### Eval Loop
                     self.policy.eval()
                     eval_idx += 1
@@ -100,15 +103,15 @@ class OnPolicyTrainer(BaseTrainer):
                         visitation_map = self.visitation_to_rgb(visitation_map)
                         self.write_image(
                             image=visitation_map,
-                            step=step,
+                            step=current_step,
                             logdir="Image",
                             name="visitation map",
                         )
 
-                    self.write_log(eval_dict, step=step, eval_log=True)
+                    self.write_log(eval_dict, step=current_step, eval_log=True)
                     self.write_video(
                         running_video,
-                        step=step,
+                        step=current_step,
                         logdir=f"Video",
                         name="running_video",
                     )
@@ -116,7 +119,7 @@ class OnPolicyTrainer(BaseTrainer):
                     self.last_return_mean.append(eval_dict[f"eval/return_mean"])
                     self.last_return_std.append(eval_dict[f"eval/return_std"])
 
-                    self.save_model(step)
+                    self.save_model(current_step)
 
                 torch.cuda.empty_cache()
 

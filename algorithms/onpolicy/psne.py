@@ -73,7 +73,6 @@ class PSNE_Algorithm(nn.Module):
             actor=actor,
             critic=critic,
             states=batch["states"],
-            nupdates=self.args.on_policy_nupdates,
             critic_lr=self.args.critic_lr,
             entropy_scaler=self.args.entropy_scaler,
             batch_size=self.args.on_policy_batch_size,

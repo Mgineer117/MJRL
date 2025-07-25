@@ -16,8 +16,8 @@ class DDPG_Learner(Base):
     def __init__(
         self,
         actor: TD3_Actor | TD3_Actor_From_Critic,
-        critic: TD3_Critic,
-        nupdates: int,
+        critic1: TD3_Critic,
+        critic2: TD3_Critic,
         actor_lr: float = 3e-4,
         critic_lr: float = 5e-4,
         policy_freq: int = 2,
@@ -38,7 +38,6 @@ class DDPG_Learner(Base):
         self.policy_freq = policy_freq
         self.gamma = gamma
         self.tau = tau
-        self.nupdates = nupdates
 
         # trainable networks
         self.is_discrete = is_discrete
@@ -49,11 +48,11 @@ class DDPG_Learner(Base):
             self.actor = actor
             self.actor_target = actor
 
-            self.critic1 = critic
-            self.critic2 = deepcopy(critic)
+            self.critic1 = critic1
+            self.critic2 = critic2
 
-            self.critic_target1 = deepcopy(critic)
-            self.critic_target2 = deepcopy(critic)
+            self.critic_target1 = deepcopy(critic1)
+            self.critic_target2 = deepcopy(critic2)
 
             self.critic_optimizer = torch.optim.Adam(
                 [
@@ -65,11 +64,11 @@ class DDPG_Learner(Base):
             self.actor = actor
             self.actor_target = deepcopy(actor)
 
-            self.critic1 = critic
-            self.critic2 = deepcopy(critic)
+            self.critic1 = critic1
+            self.critic2 = critic2
 
-            self.critic_target1 = deepcopy(critic)
-            self.critic_target2 = deepcopy(critic)
+            self.critic_target1 = deepcopy(critic1)
+            self.critic_target2 = deepcopy(critic2)
 
             self.actor_optimizer = torch.optim.Adam(
                 params=self.actor.parameters(), lr=actor_lr
@@ -84,8 +83,8 @@ class DDPG_Learner(Base):
         self.steps = 0
         self.to(self.dtype).to(self.device)
 
-    def lr_lambda(self, step):
-        return 1.0 - float(step) / float(self.nupdates)
+    def lr_lambda(self, fraction: float):
+        return 1.0 - fraction
 
     def forward(self, state: np.ndarray, deterministic: bool = False):
         state = self.preprocess_state(state)
@@ -103,13 +102,13 @@ class DDPG_Learner(Base):
                 tau * origin_param.data + (1.0 - tau) * target_param.data
             )
 
-    def learn(self, replay_buffer: ReplayBuffer):
+    def learn(self, replay_buffer: ReplayBuffer, fraction: float):
         if self.is_discrete:
-            return self.learn_for_discrete(replay_buffer)
+            return self.learn_for_discrete(replay_buffer, fraction)
         else:
-            return self.learn_for_continuous(replay_buffer)
+            return self.learn_for_continuous(replay_buffer, fraction)
 
-    def learn_for_discrete(self, replay_buffer: ReplayBuffer):
+    def learn_for_discrete(self, replay_buffer: ReplayBuffer, fraction: float):
         """Performs a single training step using DDPG TD3, incorporating all reference training steps."""
         self.train()
         t0 = time.time()
@@ -167,7 +166,7 @@ class DDPG_Learner(Base):
 
         return loss_dict, update_time
 
-    def learn_for_continuous(self, replay_buffer: ReplayBuffer):
+    def learn_for_continuous(self, replay_buffer: ReplayBuffer, fraction: float):
         """Performs a single training step using DDPG TD3, incorporating all reference training steps."""
         self.train()
         t0 = time.time()

@@ -16,24 +16,12 @@ def get_args():
 
     # === TRAINING PARAMETER === #
     parser.add_argument(
-        "--hl-onpolicy-timesteps",
-        type=int,
-        default=1e6,
-        help="Number of training epochs.",
-    )
-    parser.add_argument(
-        "--onpolicy-timesteps", type=int, default=1e6, help="Number of training epochs."
-    )
-    parser.add_argument(
-        "--hl-offpolicy-timesteps",
-        type=int,
-        default=5e5,
-        help="Number of training epochs.",
+        "--onpolicy-timesteps", type=int, default=3e6, help="Number of training epochs."
     )
     parser.add_argument(
         "--offpolicy-timesteps",
         type=int,
-        default=5e5,
+        default=1e6,
         help="Number of training epochs.",
     )
     parser.add_argument(
@@ -92,7 +80,7 @@ def get_args():
         "--buffer-size", type=int, default=200_000, help="Base learning rate."
     )
     parser.add_argument(
-        "--warmup-samples", type=int, default=20_000, help="Base learning rate."
+        "--warmup-samples", type=int, default=10_000, help="Base learning rate."
     )
     parser.add_argument(
         "--action-noise-coeff", type=float, default=0.1, help="Base learning rate."
@@ -109,7 +97,7 @@ def get_args():
     parser.add_argument(
         "--hrl-base-algorithm",
         type=str,
-        default="ppo",
+        default="sac",
         help="Number of samples for training.",
     )
     parser.add_argument(
@@ -176,15 +164,6 @@ def get_args():
     )
 
     args = parser.parse_args()
-    if (
-        args.algo_name in ("ppo", "psne", "trpo", "drndppo", "hrl_allo")
-        and args.hrl_base_algorithm == "ppo"
-    ):
-        args.timesteps = args.onpolicy_timesteps
-        args.hl_timesteps = args.hl_onpolicy_timesteps
-    else:
-        args.timesteps = args.offpolicy_timesteps
-        args.hl_timesteps = args.hl_offpolicy_timesteps
     args.device = select_device(args.gpu_idx)
 
     unique_id = str(uuid.uuid4())[:4]

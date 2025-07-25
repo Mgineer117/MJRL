@@ -20,9 +20,6 @@ class HRL_SAC_Learner(SAC_Learner):
         #
         self.to(self.dtype).to(self.device)
 
-    def lr_lambda(self, step):
-        return 1.0 - float(step) / float(self.nupdates)
-
     def update_options(self, policies):
         """Update the policies with new options."""
         self.policies = policies
@@ -83,9 +80,6 @@ class HRL_PPO_Learner(PPO_Learner):
 
         #
         self.to(self.dtype).to(self.device)
-
-    def lr_lambda(self, step):
-        return 1.0 - float(step) / float(self.nupdates)
 
     def update_options(self, policies):
         """Update the policies with new options."""

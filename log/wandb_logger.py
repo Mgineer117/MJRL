@@ -71,7 +71,6 @@ class WandbLogger(BaseLogger):
         :param Iterable[str] display_keys: a list of keys to be printed. If None, print
             all stored keys, default to None.
         """
-        self.store(tab="update", env_step=step)
         self.write_without_reset(step)
         return super().write(step, eval_log, display, display_keys)
 

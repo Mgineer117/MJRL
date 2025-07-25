@@ -16,14 +16,14 @@ class SAC_Learner(Base):
     def __init__(
         self,
         actor: SAC_Actor,
-        critic: SAC_Critic,
-        nupdates: int,
+        critic1: SAC_Critic,
+        critic2: SAC_Critic,
         actor_lr: float = 3e-4,
-        critic_lr: float = 5e-4,
+        critic_lr: float = 3e-4,
+        entropy_lr: float = 3e-4,
         gamma: float = 0.99,
         tau: float = 0.005,
-        entropy_scaler: float = 1e-3,
-        entropy_automation: str = "auto_0.2",
+        entropy_scaler: str | float = "auto_0.2",
         is_discrete: bool = False,
         device=torch.device("cpu"),
     ):
@@ -40,40 +40,42 @@ class SAC_Learner(Base):
         self.state_dim = actor.state_dim
         self.action_dim = actor.action_dim
 
-        self.entropy_automation = entropy_automation
+        self.entropy_scaler = entropy_scaler
 
-        if isinstance(entropy_automation, str) and entropy_automation.startswith(
-            "auto"
-        ):
+        if isinstance(entropy_scaler, str) and entropy_scaler.startswith("auto"):
             init_value = 1.0
-            if "_" in entropy_automation:
-                init_value = float(entropy_automation.split("_")[1])
+            if "_" in entropy_scaler:
+                init_value = float(entropy_scaler.split("_")[1])
                 assert init_value > 0, "Entropy scaler must be positive."
-            self.entropy_scaler = nn.Parameter(
-                init_value * torch.ones(1, dtype=torch.float32, device=device)
-            )
+            self.log_entropy_scaler = torch.log(
+                torch.ones(1, device=self.device) * init_value
+            ).requires_grad_(True)
             self.entropy_optimizer = torch.optim.Adam(
-                [self.entropy_scaler], lr=critic_lr
+                [self.log_entropy_scaler], lr=entropy_lr
             )
-            self.entropy_target = -actor.action_dim
+            self.entropy_scaler = torch.exp(self.log_entropy_scaler.detach())
+            if is_discrete:
+                self.entropy_target = -np.log(1.0 / self.action_dim) * 0.98
+            else:
+                self.entropy_target = -float(actor.action_dim)
+
         else:
-            self.entropy_scaler = entropy_scaler
+            self.entropy_scaler = torch.tensor(entropy_scaler, device=self.device)
             self.entropy_target = None
 
         self.gamma = gamma
         self.tau = tau
-        self.nupdates = nupdates
 
         # trainable networks
         self.is_discrete = is_discrete
 
         self.actor = actor
 
-        self.critic1 = critic
-        self.critic2 = deepcopy(critic)
+        self.critic1 = critic1
+        self.critic2 = critic2
 
-        self.critic_target1 = deepcopy(critic)
-        self.critic_target2 = deepcopy(critic)
+        self.critic_target1 = deepcopy(critic1)
+        self.critic_target2 = deepcopy(critic2)
 
         self.actor_optimizer = torch.optim.Adam(
             params=self.actor.parameters(), lr=actor_lr
@@ -88,8 +90,8 @@ class SAC_Learner(Base):
         self.steps = 0
         self.to(self.dtype).to(self.device)
 
-    def lr_lambda(self, step):
-        return 1.0 - float(step) / float(self.nupdates)
+    def lr_lambda(self, fraction: float):
+        return 1.0 - fraction
 
     def forward(self, state: np.ndarray, deterministic: bool = False):
         state = self.preprocess_state(state)
@@ -102,12 +104,19 @@ class SAC_Learner(Base):
         }
 
     def _update_target_network(self, target: nn.Module, origin: nn.Module, tau: float):
-        for target_param, origin_param in zip(target.parameters(), origin.parameters()):
-            target_param.data.copy_(
-                tau * origin_param.data + (1.0 - tau) * target_param.data
-            )
+        with torch.no_grad():
+            for target_param, origin_param in zip(
+                target.parameters(), origin.parameters()
+            ):
+                target_param.data.mul_(1 - tau)
+                torch.add(
+                    target_param.data,
+                    origin_param.data,
+                    alpha=tau,
+                    out=target_param.data,
+                )
 
-    def learn(self, replay_buffer: ReplayBuffer):
+    def learn(self, replay_buffer: ReplayBuffer, fraction: float):
         """Performs a single training step using DDPG TD3, incorporating all reference training steps."""
         self.train()
         t0 = time.time()
@@ -116,6 +125,16 @@ class SAC_Learner(Base):
         loss_dict = {}
 
         states, actions, next_states, rewards, terminals = replay_buffer.sample()
+
+        actions_pi, infos_pi = self.actor(states)
+
+        ### === ENTROPY SCALER UPDATE === ###
+        # note that entropy scaler is updated after critic and actor update
+        # this ensures that the entropy scaler update does not affect the critic and actor loss
+        entropy_loss = self.entropy_loss(
+            probs=infos_pi["probs"],
+            logprobs=infos_pi["logprobs"],
+        )
 
         ### === CRITIC UPDATE === ###
         critic_loss, td_error = self.critic_loss(
@@ -145,7 +164,7 @@ class SAC_Learner(Base):
         self.critic_optimizer.step()
 
         ### === ACTOR UPDATE === ###
-        actor_loss, infos = self.actor_loss(states)
+        actor_loss, actor_infos = self.actor_loss(states, actions_pi, infos_pi)
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
@@ -164,36 +183,12 @@ class SAC_Learner(Base):
         )
         self.actor_optimizer.step()
 
-        ### === ENTROPY SCALER UPDATE === ###
-        # note that entropy scaler is updated after critic and actor update
-        # this ensures that the entropy scaler update does not affect the critic and actor loss
-        if self.entropy_target is not None:
-            actor_probs = infos["probs"].detach()
-            actor_logprobs = infos["logprobs"].detach()
-            # Update entropy scaler
-            if self.is_discrete:
-                entropy_loss = (
-                    -torch.log(self.entropy_scaler)
-                    * (actor_logprobs + self.entropy_target).detach()
-                )
-                entropy_loss = (actor_probs * entropy_loss).sum(1).mean()
-            else:
-                entropy_loss = -(
-                    torch.log(self.entropy_scaler)
-                    * (actor_logprobs + self.entropy_target).detach()
-                ).mean()
-
-            self.entropy_optimizer.zero_grad()
-            entropy_loss.backward()
-            self.entropy_optimizer.step()
-        else:
-            entropy_loss = torch.tensor(0.0, device=self.device)
-
         ### === LOGGING === ###
         loss_dict[f"{self.name}/critic_loss"] = critic_loss.item()
         loss_dict[f"{self.name}/td_error"] = td_error.item()
         loss_dict[f"{self.name}/actor_loss"] = actor_loss.item()
         loss_dict[f"{self.name}/entropy_loss"] = entropy_loss.item()
+        loss_dict[f"{self.name}/entropy_scaler"] = self.entropy_scaler.item()
         loss_dict.update(critic_grad_dict)
         loss_dict.update(critic_norm_dict)
         loss_dict.update(actor_grad_dict)
@@ -202,8 +197,9 @@ class SAC_Learner(Base):
         self.steps += 1
 
         ### === POLYAK AVERAGING === ###
-        self._update_target_network(self.critic_target1, self.critic1, self.tau)
-        self._update_target_network(self.critic_target2, self.critic2, self.tau)
+        with torch.no_grad():
+            self._update_target_network(self.critic_target1, self.critic1, self.tau)
+            self._update_target_network(self.critic_target2, self.critic2, self.tau)
 
         # Cleanup
         del states, actions, next_states, rewards, terminals
@@ -216,8 +212,9 @@ class SAC_Learner(Base):
     def actor_loss(
         self,
         states: torch.Tensor,
+        actions: torch.Tensor,
+        infos: dict,
     ):
-        actions, infos = self.actor(states)
 
         if self.is_discrete:
             # actor gradient is applied to the actor_probs
@@ -284,26 +281,51 @@ class SAC_Learner(Base):
         else:
             with torch.no_grad():
                 next_actions, infos = self.actor(next_states)
-                actor_probs = infos["probs"].detach()
-                actor_logprobs = infos["logprobs"].detach()
+                next_actor_logprobs = infos["logprobs"].detach()
 
                 critic_next_states = torch.cat([next_states, next_actions], dim=-1)
 
-                target_Q1 = self.critic_target1(critic_next_states)
-                target_Q2 = self.critic_target2(critic_next_states)
-                target_Q = torch.min(target_Q1, target_Q2)
-                target_Q = target_Q - self.entropy_scaler * actor_logprobs
-                target_Q = (rewards + (1 - terminals) * self.gamma * target_Q).detach()
+                next_Q1 = self.critic_target1(critic_next_states)
+                next_Q2 = self.critic_target2(critic_next_states)
+                next_Q = torch.min(next_Q1, next_Q2)
+                next_soft_Q = next_Q - self.entropy_scaler * next_actor_logprobs
+                target_Q = rewards + (1 - terminals) * self.gamma * next_soft_Q
 
             critic_states = torch.cat([states, actions], dim=-1)
 
             current_Q1 = self.critic1(critic_states)
             current_Q2 = self.critic2(critic_states)
 
-            critic1_loss = F.huber_loss(current_Q1, target_Q)
-            critic2_loss = F.huber_loss(current_Q2, target_Q)
+            critic1_loss = F.mse_loss(current_Q1, target_Q)
+            critic2_loss = F.mse_loss(current_Q2, target_Q)
 
-            critic_loss = critic1_loss + critic2_loss
+            critic_loss = 0.5 * (critic1_loss + critic2_loss)
             td_error = (target_Q - current_Q1).mean().cpu()
 
         return critic_loss, td_error
+
+    def entropy_loss(self, probs: torch.Tensor, logprobs: torch.Tensor):
+        if self.entropy_target is not None:
+            self.entropy_scaler = torch.exp(self.log_entropy_scaler.detach())
+
+            actor_probs = probs.detach()
+            actor_logprobs = logprobs.detach()
+            # Update entropy scaler
+            if self.is_discrete:
+                entropy_loss = self.log_entropy_scaler * (
+                    actor_logprobs + self.entropy_target
+                )
+                entropy_loss = -(actor_probs * entropy_loss).sum(1).mean()
+            else:
+                entropy_loss = -(
+                    self.log_entropy_scaler * (actor_logprobs + self.entropy_target)
+                ).mean()
+
+            self.entropy_optimizer.zero_grad()
+            entropy_loss.backward()
+            self.entropy_optimizer.step()
+
+        else:
+            entropy_loss = torch.tensor(0.0, device=self.device)
+
+        return entropy_loss

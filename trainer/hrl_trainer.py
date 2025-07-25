@@ -67,8 +67,8 @@ class HRLOnPolicyTrainer(BaseTrainer):
 
         # training parameters
         self.init_timesteps = init_timesteps
-        self.timesteps = args.timesteps
-        self.hl_timesteps = args.hl_timesteps
+        self.timesteps = args.onpolicy_timesteps
+        self.hl_timesteps = args.onpolicy_timesteps
 
         self.log_interval = args.log_interval
         self.eval_interval = int(self.timesteps / self.log_interval)
@@ -104,11 +104,11 @@ class HRLOnPolicyTrainer(BaseTrainer):
                 while pbar.n < int(
                     (option_idx + 1) * (self.timesteps + self.init_timesteps)
                 ):
-                    # --- START OF EPOCH/ITERATION ---
-                    current_step = pbar.n
-
                     policy = self.policies[option_idx]
                     policy.train()
+
+                    current_step = pbar.n + 1  # + 1 to avoid zero division
+                    fraction = current_step / total_timesteps
 
                     # === Initial Iteration ===
                     batch, sample_time = self.sampler.collect_samples(
@@ -124,7 +124,7 @@ class HRLOnPolicyTrainer(BaseTrainer):
                             states, next_states, option_idx
                         )
                         batch["rewards"] = intrinsic_rewards.cpu().numpy()
-                    loss_dict, timesteps, update_time = policy.learn(batch)
+                    loss_dict, timesteps, update_time = policy.learn(batch, fraction)
 
                     # add timesteps
                     current_step += timesteps
@@ -208,13 +208,17 @@ class HRLOnPolicyTrainer(BaseTrainer):
             desc=f"{self.hl_policy.name} Training (Timesteps)",
         ) as pbar:
             while pbar.n < total_tiemesteps:
-                current_step = pbar.n
                 self.hl_policy.train()
+
+                current_step = pbar.n + 1  # + 1 to avoid zero division
+                fraction = current_step / total_tiemesteps
 
                 batch, sample_time = self.hl_sampler.collect_samples(
                     env=self.env, policy=self.hl_policy, seed=self.seed
                 )
-                loss_dict, timesteps, update_time = self.hl_policy.learn(batch)
+                loss_dict, timesteps, update_time = self.hl_policy.learn(
+                    batch, fraction
+                )
 
                 # add timesteps
                 current_step += timesteps
@@ -483,6 +487,9 @@ class HRLOffPolicyTrainer(HRLOnPolicyTrainer):
     def __init__(self, replay_buffer: ReplayBuffer, **kwargs) -> None:
         super().__init__(**kwargs)
 
+        self.timesteps = self.args.offpolicy_timesteps
+        self.hl_timesteps = self.args.offpolicy_timesteps
+
         self.random_policy = UniformRandom(
             state_dim=self.args.state_dim,
             action_dim=self.args.action_dim,
@@ -513,6 +520,7 @@ class HRLOffPolicyTrainer(HRLOnPolicyTrainer):
         ) as pbar:
             while pbar.n < total_timesteps:
                 current_step = pbar.n + 1  # + 1 to avoid zero division
+                fraction = current_step / total_timesteps
 
                 # selecting a policy
                 if current_step < self.warmup_samples:
@@ -568,7 +576,7 @@ class HRLOffPolicyTrainer(HRLOnPolicyTrainer):
                         loss_dict_list = []
                         for i, idx in enumerate(self.trainable_options):
                             loss_dict, update_time = self.policies[idx].learn(
-                                self.replay_buffers[i]
+                                self.replay_buffers[i], fraction
                             )
                             total_update_time += update_time
                             loss_dict_list.append(loss_dict)
@@ -624,16 +632,17 @@ class HRLOffPolicyTrainer(HRLOnPolicyTrainer):
         # assign trained option policies
         eval_idx = 0
         init_timesteps = current_step
-        total_tiemesteps = init_timesteps + self.hl_timesteps
+        total_timesteps = init_timesteps + self.hl_timesteps
         self.hl_policy.update_options(self.policies)
         with tqdm(
-            total=total_tiemesteps,
+            total=total_timesteps,
             initial=init_timesteps,
             desc=f"{self.hl_policy.name} Training (Timesteps)",
         ) as pbar:
-            while pbar.n < total_tiemesteps:
-                current_step = pbar.n + 1  # + 1 to avoid zero division
+            while pbar.n < total_timesteps:
                 self.hl_policy.train()
+                current_step = pbar.n + 1  # + 1 to avoid zero division
+                fraction = current_step / total_timesteps
 
                 # Env initialization
                 state, infos = self.env.reset(seed=self.seed)
@@ -686,7 +695,7 @@ class HRLOffPolicyTrainer(HRLOnPolicyTrainer):
                     # === UPDATE POLICY === #
                     if current_step >= init_timesteps + self.warmup_samples:
                         loss_dict, update_time = self.hl_policy.learn(
-                            self.hl_replay_buffer
+                            self.hl_replay_buffer, fraction
                         )
                         loss_dict[f"{self.hl_policy.name}/analytics/update_time"] = (
                             update_time

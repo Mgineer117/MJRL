@@ -14,7 +14,6 @@ class PPO_Learner(Base):
         self,
         actor: PPO_Actor,
         critic: PPO_Critic,
-        nupdates: int,
         actor_lr: float = 3e-4,
         critic_lr: float = 5e-4,
         num_minibatch: int = 8,
@@ -46,7 +45,6 @@ class PPO_Learner(Base):
         self.l2_reg = l2_reg
         self.target_kl = target_kl
         self.eps_clip = eps_clip
-        self.nupdates = nupdates
 
         # trainable networks
         self.actor = actor
@@ -65,8 +63,8 @@ class PPO_Learner(Base):
         #
         self.to(self.dtype).to(self.device)
 
-    def lr_lambda(self, step):
-        return 1.0 - float(step) / float(self.nupdates)
+    def lr_lambda(self, fraction: float):
+        return 1.0 - fraction
 
     def forward(self, state: np.ndarray, deterministic: bool = False):
         state = self.preprocess_state(state)
@@ -78,7 +76,7 @@ class PPO_Learner(Base):
             "dist": metaData["dist"],
         }
 
-    def learn(self, batch):
+    def learn(self, batch: dict, fraction: float):
         """Performs a single training step using PPO, incorporating all reference training steps."""
         self.train()
         t0 = time.time()
@@ -167,7 +165,7 @@ class PPO_Learner(Base):
             if kl_div.item() > self.target_kl:
                 break
 
-        self.lr_scheduler.step()
+        # self.lr_scheduler.step(fraction)
 
         # Logging
         loss_dict = {

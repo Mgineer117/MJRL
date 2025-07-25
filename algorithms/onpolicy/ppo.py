@@ -53,7 +53,6 @@ class PPO_Algorithm(nn.Module):
         self.policy = PPO_Learner(
             actor=actor,
             critic=critic,
-            nupdates=self.args.on_policy_nupdates,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
             num_minibatch=self.args.num_minibatch,

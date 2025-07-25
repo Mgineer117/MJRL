@@ -36,7 +36,6 @@ def setup_logger(args, exp_time, seed):
     Return: WandB logger, Tensorboard logger
     """
     # Get the current date and time
-    print(args)
     args.group = "-".join((exp_time, args.unique_id))
     args.name = "-".join(
         (args.algo_name, args.env_name, args.unique_id, "seed:" + str(seed))

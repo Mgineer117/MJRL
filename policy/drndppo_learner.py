@@ -18,7 +18,6 @@ class DRNDPPO_Learner(Base):
         critic: PPO_Critic,
         drnd_model: nn.Module,
         drnd_critic: PPO_Critic,
-        nupdates: int | None = None,
         actor_lr: float = 3e-4,
         critic_lr: float = 5e-4,
         drnd_lr: float = 3e-4,
@@ -47,7 +46,6 @@ class DRNDPPO_Learner(Base):
         self.state_dim = actor.state_dim
         self.action_dim = actor.action_dim
 
-        self.nupdates = nupdates
         self.num_minibatch = num_minibatch
         self.minibatch_size = minibatch_size
         self.entropy_scaler = entropy_scaler
@@ -86,11 +84,8 @@ class DRNDPPO_Learner(Base):
         #
         self.to(self.dtype).to(self.device)
 
-    def lr_lambda(self, step):
-        if self.nupdates is not None:
-            return 1.0 - float(step) / float(self.nupdates)
-        else:
-            return 1.0
+    def lr_lambda(self, fraction: float):
+        return 1.0 - fraction
 
     def forward(self, state: np.ndarray, deterministic: bool = False):
         state = self.preprocess_state(state)
@@ -136,7 +131,7 @@ class DRNDPPO_Learner(Base):
 
         return intrinsic_rewards
 
-    def learn(self, batch):
+    def learn(self, batch: dict, fraction: float):
         """Performs a single training step using PPO, incorporating all reference training steps."""
         self.train()
         t0 = time.time()
@@ -257,7 +252,7 @@ class DRNDPPO_Learner(Base):
             if kl_div.item() > self.target_kl:
                 break
 
-        self.lr_scheduler.step()
+        # self.lr_scheduler.step(fraction)
 
         # Logging
         loss_dict = {

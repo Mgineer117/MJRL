@@ -46,13 +46,18 @@ class DDPG_Algorithm(nn.Module):
                 "[INFO] This works ok, but not widely used discrete method. "
                 "[INFO] Consider using PPO or SAC for discrete action space."
             )
-            critic = TD3_Critic(
+            critic1 = TD3_Critic(
+                self.args.state_dim,
+                self.args.action_dim,
+                hidden_dim=self.args.critic_fc_dim,
+            )
+            critic2 = TD3_Critic(
                 self.args.state_dim,
                 self.args.action_dim,
                 hidden_dim=self.args.critic_fc_dim,
             )
             # actor is a wrapper that chooses over critic
-            actor = TD3_Actor_From_Critic(critic)
+            actor = TD3_Actor_From_Critic(critic1)
         else:
             actor = TD3_Actor(
                 input_dim=self.args.state_dim,
@@ -63,7 +68,12 @@ class DDPG_Algorithm(nn.Module):
                 activation=nn.ReLU(),
                 device=self.args.device,
             )
-            critic = TD3_Critic(
+            critic1 = TD3_Critic(
+                self.args.state_dim,
+                self.args.action_dim,
+                hidden_dim=self.args.critic_fc_dim,
+            )
+            critic2 = TD3_Critic(
                 self.args.state_dim,
                 self.args.action_dim,
                 hidden_dim=self.args.critic_fc_dim,
@@ -71,8 +81,8 @@ class DDPG_Algorithm(nn.Module):
 
         self.policy = DDPG_Learner(
             actor=actor,
-            critic=critic,
-            nupdates=self.args.off_policy_nupdates,
+            critic1=critic1,
+            critic2=critic2,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
             policy_freq=self.args.policy_freq,

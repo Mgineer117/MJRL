@@ -69,7 +69,6 @@ class DRND_Algorithm(nn.Module):
             critic=critic,
             drnd_model=drnd_model,
             drnd_critic=drnd_critic,
-            nupdates=self.args.on_policy_nupdates,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
             drnd_lr=3e-4,

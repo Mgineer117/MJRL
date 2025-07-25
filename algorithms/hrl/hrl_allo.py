@@ -220,7 +220,6 @@ class HRL_ALLO(nn.Module):
             self.hl_policy = HRL_PPO_Learner(
                 actor=actor,
                 critic=critic,
-                nupdates=self.args.on_policy_hl_nupdates,
                 actor_lr=self.args.actor_lr,
                 critic_lr=self.args.critic_lr,
                 num_minibatch=self.args.num_minibatch,
@@ -253,7 +252,6 @@ class HRL_ALLO(nn.Module):
             self.hl_policy = HRL_SAC_Learner(
                 actor=actor,
                 critic=critic,
-                nupdates=self.args.off_policy_hl_nupdates,
                 actor_lr=self.args.actor_lr,
                 critic_lr=self.args.critic_lr,
                 gamma=self.args.gamma,

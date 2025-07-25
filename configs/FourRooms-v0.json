@@ -1,7 +1,5 @@
 {
-    "hl_onpolicy_timesteps": 1e6,
     "onpolicy_timesteps": 1e6,
-    "hl_offpolicy_timesteps": 5e5,
     "offpolicy_timesteps": 5e5,
     "state_mask": [0, 1]
 }

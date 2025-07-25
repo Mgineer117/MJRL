@@ -43,7 +43,7 @@ class OffPolicyTrainer(BaseTrainer):
 
         # training parameters
         self.episode_len = args.episode_len
-        self.timesteps = args.timesteps
+        self.timesteps = args.offpolicy_timesteps
         self.warmup_samples = args.warmup_samples
 
         self.log_interval = args.log_interval
@@ -73,8 +73,10 @@ class OffPolicyTrainer(BaseTrainer):
             desc=f"{self.policy.name} Training (Timesteps)",
         ) as pbar:
             while pbar.n < self.timesteps:
-                current_step = pbar.n + 1  # + 1 to avoid zero division
                 self.policy.train()
+
+                current_step = pbar.n + 1  # + 1 to avoid zero division
+                fraction = current_step / self.timesteps
 
                 policy = (
                     self.random_policy
@@ -104,7 +106,9 @@ class OffPolicyTrainer(BaseTrainer):
                     self.replay_buffer.append(state, action, next_state, reward, done)
 
                     if current_step >= self.warmup_samples:
-                        loss_dict, update_time = policy.learn(self.replay_buffer)
+                        loss_dict, update_time = policy.learn(
+                            self.replay_buffer, fraction
+                        )
                         loss_dict[f"{self.policy.name}/analytics/timesteps"] = (
                             current_step
                         )

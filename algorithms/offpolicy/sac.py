@@ -49,23 +49,30 @@ class SAC_Algorithm(nn.Module):
             activation=nn.ReLU(),
             device=self.args.device,
         )
-        critic = SAC_Critic(
+        critic1 = SAC_Critic(
             self.args.state_dim,
             self.args.action_dim,
             hidden_dim=self.args.critic_fc_dim,
             is_discrete=self.args.is_discrete,
+            activation=nn.ReLU(),
+        )
+        critic2 = SAC_Critic(
+            self.args.state_dim,
+            self.args.action_dim,
+            hidden_dim=self.args.critic_fc_dim,
+            is_discrete=self.args.is_discrete,
+            activation=nn.ReLU(),
         )
 
         self.policy = SAC_Learner(
             actor=actor,
-            critic=critic,
-            nupdates=self.args.off_policy_nupdates,
+            critic1=critic1,
+            critic2=critic2,
             actor_lr=self.args.actor_lr,
             critic_lr=self.args.critic_lr,
-            K_epochs=self.args.K_epochs,
             gamma=self.args.gamma,
             tau=self.args.tau,
-            entropy_automation=self.args.entropy_automation,
+            entropy_scaler=self.args.entropy_scaler,
             is_discrete=self.args.is_discrete,
             device=self.args.device,
         )

@@ -24,7 +24,6 @@ class PSNE_Learner(Base):
         actor: PPO_Actor,
         critic: PPO_Critic,
         states: np.ndarray,
-        nupdates: int,
         critic_lr: float = 5e-4,
         entropy_scaler: float = 1e-3,
         batch_size: int = 8,
@@ -57,7 +56,6 @@ class PSNE_Learner(Base):
         self.target_kl = target_kl
         self.backtrack_iters = backtrack_iters
         self.backtrack_coeff = backtrack_coeff
-        self.nupdates = nupdates
 
         # trainable networks
         self.actor = actor
@@ -71,9 +69,8 @@ class PSNE_Learner(Base):
         self.to(self.dtype).to(self.device)
         self.sample_policy()
 
-    def lr_scheduler(self):
-        self.target_kl = self.init_target_kl * (1 - self.steps / self.nupdates)
-        self.steps += 1
+    def lr_scheduler(self, fraction: float):
+        self.target_kl = self.init_target_kl * (1 - fraction)
 
     def sample_policy(self):
         # Backtracking line search
@@ -107,7 +104,7 @@ class PSNE_Learner(Base):
             "dist": metaData["dist"],
         }
 
-    def learn(self, batch):
+    def learn(self, batch: dict, fraction: float):
         """Performs a single training step using PPO, incorporating all reference training steps."""
         self.train()
         t0 = time.time()

@@ -42,21 +42,10 @@ def call_env(args, verbose=True, spawn_agent_random: bool = False):
     else:
         args.off_policy_batch_size = 512
 
-    # === COMPUTE THE TOTAL NUMBER OF EPOCHS FOR LR SCHEDULER === #
-    args.on_policy_nupdates = args.timesteps // args.on_policy_batch_size
-    args.off_policy_nupdates = args.timesteps // args.off_policy_batch_size
-
-    args.on_policy_hl_nupdates = args.hl_timesteps // args.on_policy_batch_size
-    args.off_policy_hl_nupdates = args.hl_timesteps // args.off_policy_batch_size
-
     if args.is_discrete:
         # it argmax the onehot
         env = GridWrapper(env)
-
-    if spawn_agent_random:
-        # this makes initial agent position random
-        # currently not implemented
-        pass
+    # env = ObsNormWrapper(env)
 
     if verbose:
         print("────────────────────────────")

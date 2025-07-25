@@ -59,18 +59,20 @@ def run(args, seed, exp_time):
 if __name__ == "__main__":
     torch.set_default_dtype(torch.float32)
 
-    args = get_args()
+    init_args = get_args()
 
     exp_time = datetime.datetime.now().strftime("%m-%d_%H-%M-%S.%f")
 
-    random.seed(args.seed)
-    seeds = [random.randint(1, 100_000) for _ in range(args.num_runs)]
-    print(f"      Running ID: {args.unique_id}")
+    random.seed(init_args.seed)
+    seeds = [random.randint(1, 100_000) for _ in range(init_args.num_runs)]
+    print(f"      Running ID: {init_args.unique_id}")
     print(f"      Running Seeds: {seeds}")
     print(f"      Time Begun   : {exp_time}")
 
     for seed in seeds:
+        args = get_args()
         args.seed = seed
+        args.unique_id = init_args.unique_id
         run(args, seed, exp_time)
 
-    concat_csv_columnwise_and_delete(folder_path=args.logdir)
+    concat_csv_columnwise_and_delete(folder_path=init_args.logdir)

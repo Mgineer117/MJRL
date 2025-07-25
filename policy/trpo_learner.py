@@ -22,7 +22,6 @@ class TRPO_Learner(Base):
         self,
         actor: PPO_Actor,
         critic: PPO_Critic,
-        nupdates: int,
         critic_lr: float = 5e-4,
         batch_size: int = 8,
         entropy_scaler: float = 1e-3,
@@ -52,7 +51,6 @@ class TRPO_Learner(Base):
         self.l2_reg = l2_reg
         self.backtrack_iters = backtrack_iters
         self.backtrack_coeff = backtrack_coeff
-        self.nupdates = nupdates
 
         self.init_target_kl = target_kl
         self.target_kl = target_kl
@@ -64,12 +62,10 @@ class TRPO_Learner(Base):
         self.optimizer = torch.optim.Adam(params=self.critic.parameters(), lr=critic_lr)
 
         #
-        self.steps = 0
         self.to(self.dtype).to(self.device)
 
-    def lr_scheduler(self):
-        self.target_kl = self.init_target_kl * (1 - self.steps / self.nupdates)
-        self.steps += 1
+    def lr_scheduler(self, fraction: float):
+        self.target_kl = self.init_target_kl * (1 - fraction)
 
     def forward(self, state: np.ndarray, deterministic: bool = False):
         state = self.preprocess_state(state)
@@ -81,7 +77,7 @@ class TRPO_Learner(Base):
             "dist": metaData["dist"],
         }
 
-    def learn(self, batch):
+    def learn(self, batch: dict, fraction: float):
         """Performs a single training step using PPO, incorporating all reference training steps."""
         self.train()
         t0 = time.time()
