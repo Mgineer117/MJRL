@@ -39,6 +39,12 @@ class UniformRandom(Base):
             )
             a = torch.argmax(logits, dim=-1)
             a = F.one_hot(a, num_classes=logits.size(-1))
+
+            probs = (
+                torch.ones(self.action_dim, device=self.device, dtype=self.dtype)
+                / self.action_dim
+            )
+            logprobs = torch.log(probs)
         else:
             # for continuous pull random to be ranged -1 to 1
             logits = (
@@ -48,14 +54,12 @@ class UniformRandom(Base):
             )
             a = logits
 
-        probs = torch.ones(1, device=self.device, dtype=self.dtype)
-        logprobs = torch.zeros(1, device=self.device, dtype=self.dtype)
-        entropy = torch.zeros(1, device=self.device, dtype=self.dtype)
+            probs = torch.ones(1, device=self.device, dtype=self.dtype)
+            logprobs = torch.zeros(1, device=self.device, dtype=self.dtype)
 
         return a, {
             "probs": probs,
             "logprobs": logprobs,
-            "entropy": entropy,
         }
 
     def learn(self, batch):

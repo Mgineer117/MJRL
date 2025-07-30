@@ -113,7 +113,6 @@ class HRL_ALLO(nn.Module):
                 policy = PPO_Learner(
                     actor=actor,
                     critic=critic,
-                    nupdates=self.args.on_policy_nupdates,
                     actor_lr=self.args.actor_lr,
                     critic_lr=self.args.critic_lr,
                     num_minibatch=self.args.num_minibatch,
@@ -136,7 +135,13 @@ class HRL_ALLO(nn.Module):
                     activation=nn.ReLU(),
                     device=self.args.device,
                 )
-                critic = SAC_Critic(
+                critic1 = SAC_Critic(
+                    self.args.state_dim,
+                    self.args.action_dim,
+                    hidden_dim=self.args.critic_fc_dim,
+                    is_discrete=self.args.is_discrete,
+                )
+                critic2 = SAC_Critic(
                     self.args.state_dim,
                     self.args.action_dim,
                     hidden_dim=self.args.critic_fc_dim,
@@ -145,13 +150,13 @@ class HRL_ALLO(nn.Module):
 
                 policy = SAC_Learner(
                     actor=actor,
-                    critic=critic,
-                    nupdates=self.args.off_policy_nupdates,
+                    critic1=critic1,
+                    critic2=critic2,
                     actor_lr=self.args.actor_lr,
                     critic_lr=self.args.critic_lr,
                     gamma=self.args.gamma,
                     tau=self.args.tau,
-                    entropy_automation=self.args.entropy_automation,
+                    entropy_scaler=self.args.sac_entropy_scaler,
                     is_discrete=self.args.is_discrete,
                     device=self.args.device,
                 )
@@ -242,7 +247,13 @@ class HRL_ALLO(nn.Module):
                 activation=nn.ReLU(),
                 device=self.args.device,
             )
-            critic = SAC_Critic(
+            critic1 = SAC_Critic(
+                self.args.state_dim,
+                len(self.policies),
+                hidden_dim=self.args.critic_fc_dim,
+                is_discrete=True,
+            )
+            critic2 = SAC_Critic(
                 self.args.state_dim,
                 len(self.policies),
                 hidden_dim=self.args.critic_fc_dim,
@@ -251,13 +262,13 @@ class HRL_ALLO(nn.Module):
 
             self.hl_policy = HRL_SAC_Learner(
                 actor=actor,
-                critic=critic,
+                critic1=critic1,
+                critic2=critic2,
                 actor_lr=self.args.actor_lr,
                 critic_lr=self.args.critic_lr,
                 gamma=self.args.gamma,
                 tau=self.args.tau,
-                entropy_scaler=self.args.entropy_scaler,
-                entropy_automation=self.args.entropy_automation,
+                entropy_scaler=self.args.sac_entropy_scaler,
                 is_discrete=True,
                 device=self.args.device,
             )

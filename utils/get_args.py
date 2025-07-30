@@ -72,12 +72,15 @@ def get_args():
         "--entropy-scaler", type=float, default=1e-3, help="Base learning rate."
     )
     parser.add_argument(
+        "--sac-entropy-scaler", type=str, default="auto_0.2", help="Base learning rate."
+    )
+    parser.add_argument(
         "--eps-clip", type=float, default=0.2, help="Base learning rate."
     )
 
     # === OFF-POLICY RL PARAMETER === #
     parser.add_argument(
-        "--buffer-size", type=int, default=200_000, help="Base learning rate."
+        "--buffer-size", type=int, default=100_000, help="Base learning rate."
     )
     parser.add_argument(
         "--warmup-samples", type=int, default=10_000, help="Base learning rate."
@@ -88,9 +91,6 @@ def get_args():
     parser.add_argument("--tau", type=float, default=0.005, help="Base learning rate.")
     parser.add_argument(
         "--policy-freq", type=int, default=2, help="Base learning rate."
-    )
-    parser.add_argument(
-        "--entropy-automation", type=str, default="auto_0.2", help="Base learning rate."
     )
 
     # === HRL PARAMETER === #

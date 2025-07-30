@@ -72,7 +72,7 @@ class SAC_Algorithm(nn.Module):
             critic_lr=self.args.critic_lr,
             gamma=self.args.gamma,
             tau=self.args.tau,
-            entropy_scaler=self.args.entropy_scaler,
+            entropy_scaler=self.args.sac_entropy_scaler,
             is_discrete=self.args.is_discrete,
             device=self.args.device,
         )

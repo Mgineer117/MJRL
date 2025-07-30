@@ -40,8 +40,6 @@ class SAC_Learner(Base):
         self.state_dim = actor.state_dim
         self.action_dim = actor.action_dim
 
-        self.entropy_scaler = entropy_scaler
-
         if isinstance(entropy_scaler, str) and entropy_scaler.startswith("auto"):
             init_value = 1.0
             if "_" in entropy_scaler:
@@ -273,8 +271,8 @@ class SAC_Learner(Base):
             current_Q1 = (actions * current_Q1).sum(dim=1, keepdim=True)
             current_Q2 = (actions * current_Q2).sum(dim=1, keepdim=True)
 
-            critic1_loss = F.huber_loss(current_Q1, target_Q)
-            critic2_loss = F.huber_loss(current_Q2, target_Q)
+            critic1_loss = F.mse_loss(current_Q1, target_Q)
+            critic2_loss = F.mse_loss(current_Q2, target_Q)
 
             critic_loss = critic1_loss + critic2_loss
             td_error = (target_Q - current_Q1).mean().cpu()
@@ -312,10 +310,10 @@ class SAC_Learner(Base):
             actor_logprobs = logprobs.detach()
             # Update entropy scaler
             if self.is_discrete:
-                entropy_loss = self.log_entropy_scaler * (
+                entropy_loss = -self.log_entropy_scaler * (
                     actor_logprobs + self.entropy_target
                 )
-                entropy_loss = -(actor_probs * entropy_loss).sum(1).mean()
+                entropy_loss = (actor_probs * entropy_loss).sum(1).mean()
             else:
                 entropy_loss = -(
                     self.log_entropy_scaler * (actor_logprobs + self.entropy_target)

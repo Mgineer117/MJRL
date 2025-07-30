@@ -61,17 +61,17 @@ class SAC_Actor(Base):
 
         if self.is_discrete:
             logits = self.mu(logits)
+            logits = torch.clamp(logits, -20, 20)
             dist = Categorical(logits=logits)
 
-            # sample without categorical distribution
             if deterministic:
-                action = torch.argmax(logits, dim=-1)
+                action_idx = torch.argmax(logits, dim=-1)
             else:
-                action = dist.sample()
-            action = F.one_hot(action.long(), num_classes=self.action_dim).float()
+                action_idx = dist.sample()
 
-            probs = F.softmax(logits, dim=-1)
+            action = F.one_hot(action_idx, num_classes=self.action_dim).float()
             logprobs = F.log_softmax(logits, dim=-1)
+            probs = F.softmax(logits, dim=-1)
         else:
             mu = self.mu(logits)
             logstd = self.logstd(logits)
