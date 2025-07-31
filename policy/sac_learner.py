@@ -52,13 +52,14 @@ class SAC_Learner(Base):
                 [self.log_entropy_scaler], lr=entropy_lr
             )
             self.entropy_scaler = torch.exp(self.log_entropy_scaler.detach())
+
             if is_discrete:
                 self.entropy_target = -np.log(1.0 / self.action_dim) * 0.98
             else:
                 self.entropy_target = -float(actor.action_dim)
 
         else:
-            self.entropy_scaler = torch.tensor(entropy_scaler, device=self.device)
+            self.entropy_scaler = torch.tensor(float(entropy_scaler), device=self.device)
             self.entropy_target = None
 
         self.gamma = gamma
@@ -213,7 +214,6 @@ class SAC_Learner(Base):
         actions: torch.Tensor,
         infos: dict,
     ):
-
         if self.is_discrete:
             # actor gradient is applied to the actor_probs
             actor_probs = infos["probs"]
@@ -223,7 +223,6 @@ class SAC_Learner(Base):
                 Q1 = self.critic1(states)
                 Q2 = self.critic2(states)
                 Q = torch.min(Q1, Q2)
-
             soft_Q = self.entropy_scaler * actor_logprobs - Q
             actor_loss = (actor_probs * soft_Q).sum(dim=1).mean()
         else:
@@ -310,14 +309,11 @@ class SAC_Learner(Base):
             actor_logprobs = logprobs.detach()
             # Update entropy scaler
             if self.is_discrete:
-                entropy_loss = -self.log_entropy_scaler * (
-                    actor_logprobs + self.entropy_target
-                )
-                entropy_loss = (actor_probs * entropy_loss).sum(1).mean()
+                entropy = -self.log_entropy_scaler * (actor_logprobs + self.entropy_target)
+                entropy_loss = (actor_probs * entropy).sum(-1).mean()
             else:
-                entropy_loss = -(
-                    self.log_entropy_scaler * (actor_logprobs + self.entropy_target)
-                ).mean()
+                entropy = -self.log_entropy_scaler * (actor_logprobs + self.entropy_target)
+                entropy_loss = entropy.mean()
 
             self.entropy_optimizer.zero_grad()
             entropy_loss.backward()

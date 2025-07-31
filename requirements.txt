@@ -1,5 +1,4 @@
 gymnasium
-gymnasium[box2d]
 mujoco
 imageio
 matplotlib

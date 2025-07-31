@@ -32,9 +32,13 @@ class IntrinsicRewardFunctions(nn.Module):
         self.num_rewards = self.args.num_options
         self.extractor_mode = "ALLO"
 
+        print(f"[INFO] Using {self.extractor_mode} for intrinsic rewards.")
         self.define_extractor()
+        print(f"[INFO] Extractor defined with feature dimension: {self.args.feature_dim}")
         self.define_eigenvectors()
-        self.define_intrinsic_reward_normalizer()
+        print(f"[INFO] Eigenvectors defined with {len(self.eigenvectors)} vectors.")
+        # normalizer is not good for off-policy learning
+        # self.define_intrinsic_reward_normalizer()
 
     def forward(
         self, states: torch.Tensor, next_states: torch.Tensor, i: int
@@ -243,8 +247,8 @@ class IntrinsicRewardFunctions(nn.Module):
             intrinsic_rewards = intrinsic_rewards[:, : self.args.num_options // 2]
 
             # perform svd on intrinsic rewards
-            intrinsic_rewards = intrinsic_rewards.cpu()
-            _, _, Vt = torch.linalg.svd(intrinsic_rewards)
+            intrinsic_rewards = intrinsic_rewards.cpu().detach()
+            _, _, Vt = torch.linalg.svd(intrinsic_rewards, full_matrices=False)
             Vt = Vt.to(self.args.device)
 
             self.eigenvectors = [

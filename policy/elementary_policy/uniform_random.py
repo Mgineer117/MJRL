@@ -41,7 +41,7 @@ class UniformRandom(Base):
             a = F.one_hot(a, num_classes=logits.size(-1))
 
             probs = (
-                torch.ones(self.action_dim, device=self.device, dtype=self.dtype)
+                torch.ones(1, device=self.device, dtype=self.dtype)
                 / self.action_dim
             )
             logprobs = torch.log(probs)

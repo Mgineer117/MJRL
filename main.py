@@ -70,7 +70,7 @@ if __name__ == "__main__":
     print(f"      Time Begun   : {exp_time}")
 
     for seed in seeds:
-        args = get_args()
+        args = get_args(verbose=False)
         args.seed = seed
         args.unique_id = init_args.unique_id
         run(args, seed, exp_time)

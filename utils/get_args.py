@@ -4,7 +4,7 @@ import uuid
 import torch
 
 
-def get_args():
+def get_args(verbose=True):
     parser = argparse.ArgumentParser(description="")
 
     # === ENV PARAMETER === #
@@ -83,7 +83,7 @@ def get_args():
         "--buffer-size", type=int, default=100_000, help="Base learning rate."
     )
     parser.add_argument(
-        "--warmup-samples", type=int, default=10_000, help="Base learning rate."
+        "--warmup-samples", type=int, default=2_000, help="Base learning rate."
     )
     parser.add_argument(
         "--action-noise-coeff", type=float, default=0.1, help="Base learning rate."
@@ -164,7 +164,7 @@ def get_args():
     )
 
     args = parser.parse_args()
-    args.device = select_device(args.gpu_idx)
+    args.device = select_device(args.gpu_idx, verbose=verbose)
 
     unique_id = str(uuid.uuid4())[:4]
     args.unique_id = unique_id
