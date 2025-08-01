@@ -98,8 +98,7 @@ class SAC_Learner(Base):
 
         return a, {
             "probs": metaData["probs"],
-            "logprobs": metaData["logprobs"],
-            "dist": metaData["dist"],
+            "logprobs": metaData["logprobs"]
         }
 
     def _update_target_network(self, target: nn.Module, origin: nn.Module, tau: float):
@@ -146,8 +145,8 @@ class SAC_Learner(Base):
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        # torch.nn.utils.clip_grad_norm_(self.critic1.parameters(), max_norm=1.0)
-        # torch.nn.utils.clip_grad_norm_(self.critic2.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(self.critic1.parameters(), max_norm=100.0)
+        torch.nn.utils.clip_grad_norm_(self.critic2.parameters(), max_norm=100.0)
         critic_grad_dict = self.compute_gradient_norm(
             [self.critic1, self.critic2],
             ["critic1", "critic2"],
@@ -163,11 +162,11 @@ class SAC_Learner(Base):
         self.critic_optimizer.step()
 
         ### === ACTOR UPDATE === ###
-        actor_loss, actor_infos = self.actor_loss(states, actions_pi, infos_pi)
+        actor_loss = self.actor_loss(states, actions_pi, infos_pi)
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        # torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=10.0)
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=100.0)
         actor_grad_dict = self.compute_gradient_norm(
             [self.actor],
             ["actor"],
@@ -220,11 +219,12 @@ class SAC_Learner(Base):
             actor_logprobs = infos["logprobs"]
 
             with torch.no_grad():
-                Q1 = self.critic1(states)
-                Q2 = self.critic2(states)
-                Q = torch.min(Q1, Q2)
-            soft_Q = self.entropy_scaler * actor_logprobs - Q
-            actor_loss = (actor_probs * soft_Q).sum(dim=1).mean()
+                Q1, Q2 = self.critic1(states), self.critic2(states)
+                
+            Q = torch.sum(actor_probs * torch.min(Q1, Q2), dim=-1, keepdim=True)
+            entropy = torch.sum(actor_probs * actor_logprobs, dim=-1, keepdim=True)
+            soft_Q =  self.entropy_scaler * entropy - Q
+            actor_loss = soft_Q.mean()
         else:
             # actor gradient is applied to the actions and logprobs
             actor_logprobs = infos["logprobs"]
@@ -241,7 +241,7 @@ class SAC_Learner(Base):
             # actor_loss computations
             actor_loss = soft_Q.mean()
 
-        return actor_loss, infos
+        return actor_loss
 
     def critic_loss(
         self,
@@ -253,12 +253,11 @@ class SAC_Learner(Base):
     ):
         if self.is_discrete:
             with torch.no_grad():
-                _, infos = self.actor(next_states)
+                _, infos = self.actor(next_states, deterministic=False)
                 next_actor_probs = infos["probs"].detach()
                 next_actor_logprobs = infos["logprobs"].detach()
 
-                next_Q1 = self.critic_target1(next_states)
-                next_Q2 = self.critic_target2(next_states)
+                next_Q1, next_Q2 = self.critic_target1(next_states), self.critic_target2(next_states)
                 next_Q = torch.min(next_Q1, next_Q2)
                 next_soft_Q = next_Q - self.entropy_scaler * next_actor_logprobs
                 next_soft_Q = (next_actor_probs * next_soft_Q).sum(dim=1, keepdim=True)
@@ -309,8 +308,10 @@ class SAC_Learner(Base):
             actor_logprobs = logprobs.detach()
             # Update entropy scaler
             if self.is_discrete:
-                entropy = -self.log_entropy_scaler * (actor_logprobs + self.entropy_target)
-                entropy_loss = (actor_probs * entropy).sum(-1).mean()
+                entropy = torch.sum(actor_probs * actor_logprobs, dim=-1, keepdim=True)
+                entropy_loss = -torch.mean(self.log_entropy_scaler * (entropy + self.entropy_target))
+                # entropy = torch.sum(actor_probs * actor_logprobs, dim=-1, keepdim=True)
+                # entropy_loss = (actor_probs * entropy).sum(-1).mean()
             else:
                 entropy = -self.log_entropy_scaler * (actor_logprobs + self.entropy_target)
                 entropy_loss = entropy.mean()

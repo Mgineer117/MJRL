@@ -125,6 +125,53 @@ class HRL_ALLO(nn.Module):
                     K=self.args.K_epochs,
                     device=self.args.device,
                 )
+            elif self.args.hrl_base_algorithm == "ddpg":
+                if self.args.is_discrete:
+                    critic1 = TD3_Critic(
+                        self.args.state_dim,
+                        self.args.action_dim,
+                        hidden_dim=self.args.critic_fc_dim,
+                    )
+                    critic2 = TD3_Critic(
+                        self.args.state_dim,
+                        self.args.action_dim,
+                        hidden_dim=self.args.critic_fc_dim,
+                    )
+                    # actor is a wrapper that chooses over critic
+                    actor = TD3_Actor_From_Critic(critic1)
+                else:
+                    actor = TD3_Actor(
+                        input_dim=self.args.state_dim,
+                        hidden_dim=self.args.actor_fc_dim,
+                        action_dim=self.args.action_dim,
+                        action_space=self.env.action_space,
+                        action_noise_coeff=self.args.action_noise_coeff,
+                        activation=nn.ReLU(),
+                        device=self.args.device,
+                    )
+                    critic1 = TD3_Critic(
+                        self.args.state_dim,
+                        self.args.action_dim,
+                        hidden_dim=self.args.critic_fc_dim,
+                    )
+                    critic2 = TD3_Critic(
+                        self.args.state_dim,
+                        self.args.action_dim,
+                        hidden_dim=self.args.critic_fc_dim,
+                    )
+
+                policy = DDPG_Learner(
+                    actor=actor,
+                    critic1=critic1,
+                    critic2=critic2,
+                    actor_lr=self.args.actor_lr,
+                    critic_lr=self.args.critic_lr,
+                    policy_freq=self.args.policy_freq,
+                    gamma=self.args.gamma,
+                    tau=self.args.tau,
+                    is_discrete=self.args.is_discrete,
+                    device=self.args.device,
+                )
             elif self.args.hrl_base_algorithm == "sac":
                 actor = SAC_Actor(
                     input_dim=self.args.state_dim,
@@ -132,7 +179,6 @@ class HRL_ALLO(nn.Module):
                     action_dim=self.args.action_dim,
                     action_space=self.env.action_space,
                     is_discrete=self.args.is_discrete,
-                    activation=nn.ReLU(),
                     device=self.args.device,
                 )
                 critic1 = SAC_Critic(
@@ -237,6 +283,38 @@ class HRL_ALLO(nn.Module):
                 K=self.args.K_epochs,
                 device=self.args.device,
             )
+        elif self.args.hrl_base_algorithm == "ddpg":
+            # to print once
+            print(
+                "[INFO] DDPG for discrete action space is implemented using twin-critic Q-values. "
+                "[INFO] This works ok, but not widely used discrete method. "
+                # "[INFO] Consider using PPO or SAC for discrete action space."
+            )
+            critic1 = TD3_Critic(
+                self.args.state_dim,
+                self.args.action_dim,
+                hidden_dim=self.args.critic_fc_dim,
+            )
+            critic2 = TD3_Critic(
+                self.args.state_dim,
+                self.args.action_dim,
+                hidden_dim=self.args.critic_fc_dim,
+            )
+            # actor is a wrapper that chooses over critic
+            actor = TD3_Actor_From_Critic(critic1)
+    
+            self.hl_policy = DDPG_Learner(
+                actor=actor,
+                critic1=critic1,
+                critic2=critic2,
+                actor_lr=self.args.actor_lr,
+                critic_lr=self.args.critic_lr,
+                policy_freq=self.args.policy_freq,
+                gamma=self.args.gamma,
+                tau=self.args.tau,
+                is_discrete=self.args.is_discrete,
+                device=self.args.device,
+            )
         elif self.args.hrl_base_algorithm == "sac":
             actor = SAC_Actor(
                 input_dim=self.args.state_dim,
@@ -244,7 +322,6 @@ class HRL_ALLO(nn.Module):
                 action_dim=len(self.policies),
                 action_space=self.env.action_space,
                 is_discrete=True,
-                activation=nn.ReLU(),
                 device=self.args.device,
             )
             critic1 = SAC_Critic(

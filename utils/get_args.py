@@ -80,10 +80,10 @@ def get_args(verbose=True):
 
     # === OFF-POLICY RL PARAMETER === #
     parser.add_argument(
-        "--buffer-size", type=int, default=100_000, help="Base learning rate."
+        "--buffer-size", type=int, default=1_000_000, help="Base learning rate."
     )
     parser.add_argument(
-        "--warmup-samples", type=int, default=2_000, help="Base learning rate."
+        "--warmup-samples", type=int, default=10_000, help="Base learning rate."
     )
     parser.add_argument(
         "--action-noise-coeff", type=float, default=0.1, help="Base learning rate."

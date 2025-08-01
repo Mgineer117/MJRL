@@ -46,7 +46,6 @@ class SAC_Algorithm(nn.Module):
             action_dim=self.args.action_dim,
             action_space=self.env.action_space,
             is_discrete=self.args.is_discrete,
-            activation=nn.ReLU(),
             device=self.args.device,
         )
         critic1 = SAC_Critic(
@@ -54,14 +53,12 @@ class SAC_Algorithm(nn.Module):
             self.args.action_dim,
             hidden_dim=self.args.critic_fc_dim,
             is_discrete=self.args.is_discrete,
-            activation=nn.ReLU(),
         )
         critic2 = SAC_Critic(
             self.args.state_dim,
             self.args.action_dim,
             hidden_dim=self.args.critic_fc_dim,
             is_discrete=self.args.is_discrete,
-            activation=nn.ReLU(),
         )
 
         self.policy = SAC_Learner(

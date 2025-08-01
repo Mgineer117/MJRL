@@ -1,8 +1,9 @@
 import gymnasium as gym
+
 import torch
 import torch.nn as nn
 
-from utils.wrapper import GridWrapper, ObsNormWrapper
+from utils.wrapper import GridWrapper, PointMazeWrapper
 
 
 def call_env(args, verbose=True, spawn_agent_random: bool = False):
@@ -15,6 +16,26 @@ def call_env(args, verbose=True, spawn_agent_random: bool = False):
             render_mode="rgb_array",
             spawn_agent_random=spawn_agent_random,
         )
+    elif args.env_name in ("PointMaze-v0", "PointMaze-v1"):
+        version = args.env_name.split("-")[-1][-1]
+        version = int(version)
+        if version == 0:
+            example_map = [
+                        [1, 1, 1, 1, 1, 1],
+                        [1, "r", 1, "g", 0, 1],
+                        [1, 0, 1, 1, 0, 1],
+                        [1, 0, 0, 0, 0, 1],
+                        [1, 1, 1, 1, 1, 1],
+                    ]
+        continuing_task = False
+        env = gym.make(
+            "PointMaze_UMaze-v3",
+            maze_map=example_map,
+            max_episode_steps=500,
+            continuing_task=continuing_task,
+            render_mode="rgb_array",
+        )
+        env = PointMazeWrapper(env, example_map, 500, args.seed)
     else:
         env = gym.make(args.env_name, render_mode="rgb_array")
 

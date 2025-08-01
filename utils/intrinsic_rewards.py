@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from utils.rl import call_env
 from utils.sampler import OnlineSampler
-
+from extractor.base.mlp import NeuralNet
 
 class IntrinsicRewardFunctions(nn.Module):
     def __init__(self, logger, writer, args):
@@ -38,7 +38,7 @@ class IntrinsicRewardFunctions(nn.Module):
         self.define_eigenvectors()
         print(f"[INFO] Eigenvectors defined with {len(self.eigenvectors)} vectors.")
         # normalizer is not good for off-policy learning
-        # self.define_intrinsic_reward_normalizer()
+        self.define_intrinsic_reward_normalizer()
 
     def forward(
         self, states: torch.Tensor, next_states: torch.Tensor, i: int
@@ -90,7 +90,12 @@ class IntrinsicRewardFunctions(nn.Module):
             output_dim=self.args.feature_dim,
             activation=nn.ReLU(),
         )
-
+        # feature_network = NeuralNet(
+        #     state_dim=input_dim,
+        #     feature_dim=self.args.feature_dim,
+        #     encoder_fc_dim=[512, 512, 512, 512],
+        #     activation=nn.LeakyReLU(),
+        # )
         # === DEFINE LEARNING METHOD FOR EXTRACTOR === #
         extractor = ALLO(
             network=feature_network,
