@@ -33,12 +33,19 @@ class IntrinsicRewardFunctions(nn.Module):
         self.extractor_mode = "ALLO"
 
         print(f"[INFO] Using {self.extractor_mode} for intrinsic rewards.")
-        self.define_extractor()
-        print(f"[INFO] Extractor defined with feature dimension: {self.args.feature_dim}")
+        if args.extractor_mode == "FE":
+            self.define_fe_extractor()
+        elif args.extractor_mode == "ALLO":
+            self.define_allo_extractor()
+        else:
+            raise NotImplementedError(
+                f"Extractor mode {args.extractor_mode} is not implemented."
+            )
+        print(f"[INFO] {self.extractor_mode} Extractor defined with feature dimension: {self.args.feature_dim}")
         self.define_eigenvectors()
         print(f"[INFO] Eigenvectors defined with {len(self.eigenvectors)} vectors.")
         # normalizer is not good for off-policy learning
-        self.define_intrinsic_reward_normalizer()
+        # self.define_intrinsic_reward_normalizer()
 
     def forward(
         self, states: torch.Tensor, next_states: torch.Tensor, i: int
@@ -68,15 +75,115 @@ class IntrinsicRewardFunctions(nn.Module):
 
         return intrinsic_rewards
 
-    def define_extractor(self):
+    def define_fe_extractor(self):
+        from extractor.base.cnn import CNN
+        from utils.cnn_architecture import get_cnn_architecture
+        from extractor.extractor import Extractor
+        from trainer.extractor_trainer import ExtractorTrainer
+
+        if not os.path.exists("model"):
+            os.makedirs("model")
+        if not os.path.exists(f"model/FE/{self.args.env_name}"):
+            os.makedirs(f"model/FE/{self.args.env_name}")
+
+        # === CREATE FEATURE EXTRACTOR === #
+        encoder_architecture, decoder_architecture = get_cnn_architecture(self.args)
+
+        feature_network = CNN(state_dim=self.args.state_dim,
+                              action_dim=self.args.action_dim,
+                              feature_dim=self.args.feature_dim,
+                              encoder_architecture=encoder_architecture,
+                              decoder_architecture=decoder_architecture,
+                              device=self.args.device)
+
+        # === DEFINE LEARNING METHOD FOR EXTRACTOR === #
+        extractor = Extractor(
+            network=feature_network,
+            extractor_lr=self.args.extractor_lr,
+            epochs=self.args.fe_extractor_epochs,
+            batch_size=1024,
+            device=self.args.device,
+        )
+
+        # Step 1: Search for .pth files in the directory
+        model_dir = f"model/FE/{self.args.env_name}/"
+        pth_files = glob.glob(os.path.join(model_dir, "*.pth"))
+
+        if not pth_files:
+            print(
+                f"[INFO] No existing model found in {model_dir}. Training from scratch."
+            )
+            epochs = 0
+            model_path = os.path.join(
+                model_dir,
+                f"FE_{self.args.fe_extractor_epochs}.pth",
+            )
+        else:
+            print(f"[INFO] Found {len(pth_files)} .pth files in {model_dir}")
+            epochs = []
+            valid_files = []
+
+            for pth_file in pth_files:
+                filename = os.path.basename(pth_file)
+                parts = filename.replace(".pth", "").split("_")
+                if len(parts) != 2:
+                    print(f"[WARNING] Skipping malformed file: {filename}")
+                    continue
+
+                _, epoch_str = parts
+                try:
+                    epoch = int(epoch_str)
+                    epochs.append(epoch)
+                    valid_files.append(filename)
+                except ValueError:
+                    print(f"[WARNING] Failed to parse file: {filename}")
+                    continue
+
+            matching = [
+                (e, filename)
+                for e, filename in zip(epochs, valid_files)
+            ]
+
+            max_epoch, _, _ = max(matching, key=lambda x: x[0])
+            idx = epochs.index(max_epoch)
+            filename = matching[idx][-1]
+            model_path = os.path.join(model_dir, filename)
+            print(
+                f"[INFO] Loading model from: {model_path} (epoch {max_epoch})"
+            )
+
+            extractor.load_state_dict(
+                torch.load(model_path, map_location=self.args.device)
+            )
+            extractor.to(self.args.device)
+            epochs = max_epoch  # set current epoch
+
+        if epochs < self.args.fe_extractor_epochs:
+            self.collect_samples()
+            trainer = ExtractorTrainer(
+                extractor=extractor,
+                logger=self.logger,
+                writer=self.writer,
+                epochs=self.args.fe_extractor_epochs - epochs,
+                seed=42,  # The result of ALLO should be seed invariant
+            )
+
+            final_timesteps = trainer.train(self.batch)
+            self.current_timesteps += final_timesteps
+
+            torch.save(extractor.state_dict(), model_path)
+
+        self.extractor = extractor
+
+    def define_allo_extractor(self):
         from extractor.extractor import ALLO
         from policy.layers.building_blocks import MLP
         from trainer.extractor_trainer import ExtractorTrainer
 
         if not os.path.exists("model"):
             os.makedirs("model")
-        if not os.path.exists(f"model/{self.args.env_name}"):
-            os.makedirs(f"model/{self.args.env_name}")
+        if not os.path.exists(f"model/ALLO/{self.args.env_name}"):
+            os.makedirs(f"model/ALLO/{self.args.env_name}")
 
         # === CREATE FEATURE EXTRACTOR === #
         input_dim = (
@@ -90,17 +197,12 @@ class IntrinsicRewardFunctions(nn.Module):
             output_dim=self.args.feature_dim,
             activation=nn.ReLU(),
         )
-        # feature_network = NeuralNet(
-        #     state_dim=input_dim,
-        #     feature_dim=self.args.feature_dim,
-        #     encoder_fc_dim=[512, 512, 512, 512],
-        #     activation=nn.LeakyReLU(),
-        # )
+
         # === DEFINE LEARNING METHOD FOR EXTRACTOR === #
         extractor = ALLO(
             network=feature_network,
             extractor_lr=self.args.extractor_lr,
-            epochs=self.args.extractor_epochs,
+            epochs=self.args.allo_extractor_epochs,
             batch_size=1024,
             discount_sampling_factor=self.args.discount_sampling_factor,
             state_mask=self.args.state_mask,
@@ -108,7 +210,7 @@ class IntrinsicRewardFunctions(nn.Module):
         )
 
         # Step 1: Search for .pth files in the directory
-        model_dir = f"model/{self.args.env_name}/"
+        model_dir = f"model/ALLO/{self.args.env_name}/"
         pth_files = glob.glob(os.path.join(model_dir, "*.pth"))
 
         if not pth_files:
@@ -118,7 +220,7 @@ class IntrinsicRewardFunctions(nn.Module):
             epochs = 0
             model_path = os.path.join(
                 model_dir,
-                f"ALLO_{self.args.extractor_epochs}_{self.args.discount_sampling_factor}.pth",
+                f"ALLO_{self.args.allo_extractor_epochs}_{self.args.discount_sampling_factor}.pth",
             )
         else:
             print(f"[INFO] Found {len(pth_files)} .pth files in {model_dir}")
@@ -151,7 +253,7 @@ class IntrinsicRewardFunctions(nn.Module):
                 epochs = 0
                 model_path = os.path.join(
                     model_dir,
-                    f"ALLO_{self.args.extractor_epochs}_{self.args.discount_sampling_factor}.pth",
+                    f"ALLO_{self.args.allo_extractor_epochs}_{self.args.discount_sampling_factor}.pth",
                 )
             else:
                 matching = [
@@ -174,13 +276,13 @@ class IntrinsicRewardFunctions(nn.Module):
                 extractor.to(self.args.device)
                 epochs = max_epoch  # set current epoch
 
-        if epochs < self.args.extractor_epochs:
+        if epochs < self.args.allo_extractor_epochs:
             self.collect_samples()
             trainer = ExtractorTrainer(
                 extractor=extractor,
                 logger=self.logger,
                 writer=self.writer,
-                epochs=self.args.extractor_epochs - epochs,
+                epochs=self.args.allo_extractor_epochs - epochs,
                 seed=42,  # The result of ALLO should be seed invariant
             )
 

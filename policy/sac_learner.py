@@ -308,13 +308,12 @@ class SAC_Learner(Base):
             actor_logprobs = logprobs.detach()
             # Update entropy scaler
             if self.is_discrete:
-                entropy = torch.sum(actor_probs * actor_logprobs, dim=-1, keepdim=True)
-                entropy_loss = -torch.mean(self.log_entropy_scaler * (entropy + self.entropy_target))
+                entropy = - (actor_probs * actor_logprobs).sum(dim=-1)
+                entropy_loss = self.log_entropy_scaler * (self.entropy_target - entropy).mean()
                 # entropy = torch.sum(actor_probs * actor_logprobs, dim=-1, keepdim=True)
                 # entropy_loss = (actor_probs * entropy).sum(-1).mean()
             else:
-                entropy = -self.log_entropy_scaler * (actor_logprobs + self.entropy_target)
-                entropy_loss = entropy.mean()
+                entropy_loss = (self.log_entropy_scaler * (actor_logprobs + self.entropy_target)).mean()
 
             self.entropy_optimizer.zero_grad()
             entropy_loss.backward()

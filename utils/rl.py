@@ -40,7 +40,7 @@ def call_env(args, verbose=True, spawn_agent_random: bool = False):
         env = gym.make(args.env_name, render_mode="rgb_array")
 
     # === SAVING THE ENVIRONMENTAL SPEC === #
-    args.state_dim = env.observation_space.shape[0]
+    args.state_dim = env.observation_space.shape
     args.is_discrete = isinstance(env.action_space, gym.spaces.Discrete)
     args.action_dim = (
         env.action_space.n if args.is_discrete else env.action_space.shape[0]

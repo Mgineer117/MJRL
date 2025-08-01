@@ -113,22 +113,6 @@ class CNN(nn.Module):
         state = self.en_pmt(state)
         features = self.encoder(state)
 
-        # mu = self.mu(logits)
-        # logstd = torch.clamp(
-        #     self.logstd(logits),
-        #     min=self.logstd_range[0],
-        #     max=self.logstd_range[1],
-        # )
-        # std = torch.exp(logstd)
-
-        # if deterministic:
-        #     feature = mu
-        # else:
-        # cov = torch.diag_embed(std**2)
-        # dist = MultivariateNormal(loc=mu, covariance_matrix=cov)
-
-        # feature = dist.rsample()
-
         return features, {"loss": torch.tensor(0.0).to(self.device)}
 
     def decode(self, features: torch.Tensor, actions: torch.Tensor):

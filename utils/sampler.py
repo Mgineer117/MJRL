@@ -30,9 +30,9 @@ class Base:
         """
         batch_size = 2 * self.episode_len
         data = dict(
-            states=np.full(((batch_size, self.state_dim)), np.nan, dtype=np.float32),
+            states=np.full(((batch_size,) + self.state_dim), np.nan, dtype=np.float32),
             next_states=np.full(
-                ((batch_size, self.state_dim)), np.nan, dtype=np.float32
+                ((batch_size,) + self.state_dim), np.nan, dtype=np.float32
             ),
             actions=np.full((batch_size, self.action_dim), np.nan, dtype=np.float32),
             rewards=np.full((batch_size, 1), np.nan, dtype=np.float32),

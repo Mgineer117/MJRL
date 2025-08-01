@@ -25,7 +25,19 @@ def get_args(verbose=True):
         help="Number of training epochs.",
     )
     parser.add_argument(
-        "--extractor-epochs",
+        "--extractor-mode",
+        type=str,
+        default="FE",
+        help="Extractor mode to use.",
+    )
+    parser.add_argument(
+        "--fe-extractor-epochs",
+        type=int,
+        default=10000,
+        help="Number of training epochs.",
+    )
+    parser.add_argument(
+        "--allo-extractor-epochs",
         type=int,
         default=100000,
         help="Number of training epochs.",
