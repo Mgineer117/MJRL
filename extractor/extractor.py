@@ -38,6 +38,7 @@ class DummyExtractor(Base):
     def learn(self, batch: dict):
         pass
 
+
 class Extractor(Base):
     def __init__(
         self,
@@ -181,6 +182,7 @@ class Extractor(Base):
         )
         return grad_dict, norm_dict
 
+
 class ALLO(Base):
     def __init__(
         self,
@@ -258,7 +260,7 @@ class ALLO(Base):
             states = states.unsqueeze(0)
 
         features = self.network(states[:, self.state_mask])
-        return features
+        return features, {}
 
     def learn(self, batch: dict):
         self.train()

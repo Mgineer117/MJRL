@@ -59,7 +59,9 @@ class SAC_Learner(Base):
                 self.entropy_target = -float(actor.action_dim)
 
         else:
-            self.entropy_scaler = torch.tensor(float(entropy_scaler), device=self.device)
+            self.entropy_scaler = torch.tensor(
+                float(entropy_scaler), device=self.device
+            )
             self.entropy_target = None
 
         self.gamma = gamma
@@ -96,10 +98,7 @@ class SAC_Learner(Base):
         state = self.preprocess_state(state)
         a, metaData = self.actor(state, deterministic=deterministic)
 
-        return a, {
-            "probs": metaData["probs"],
-            "logprobs": metaData["logprobs"]
-        }
+        return a, {"probs": metaData["probs"], "logprobs": metaData["logprobs"]}
 
     def _update_target_network(self, target: nn.Module, origin: nn.Module, tau: float):
         with torch.no_grad():
@@ -220,10 +219,10 @@ class SAC_Learner(Base):
 
             with torch.no_grad():
                 Q1, Q2 = self.critic1(states), self.critic2(states)
-                
+
             Q = torch.sum(actor_probs * torch.min(Q1, Q2), dim=-1, keepdim=True)
             entropy = torch.sum(actor_probs * actor_logprobs, dim=-1, keepdim=True)
-            soft_Q =  self.entropy_scaler * entropy - Q
+            soft_Q = self.entropy_scaler * entropy - Q
             actor_loss = soft_Q.mean()
         else:
             # actor gradient is applied to the actions and logprobs
@@ -257,7 +256,9 @@ class SAC_Learner(Base):
                 next_actor_probs = infos["probs"].detach()
                 next_actor_logprobs = infos["logprobs"].detach()
 
-                next_Q1, next_Q2 = self.critic_target1(next_states), self.critic_target2(next_states)
+                next_Q1, next_Q2 = self.critic_target1(
+                    next_states
+                ), self.critic_target2(next_states)
                 next_Q = torch.min(next_Q1, next_Q2)
                 next_soft_Q = next_Q - self.entropy_scaler * next_actor_logprobs
                 next_soft_Q = (next_actor_probs * next_soft_Q).sum(dim=1, keepdim=True)
@@ -308,12 +309,16 @@ class SAC_Learner(Base):
             actor_logprobs = logprobs.detach()
             # Update entropy scaler
             if self.is_discrete:
-                entropy = - (actor_probs * actor_logprobs).sum(dim=-1)
-                entropy_loss = self.log_entropy_scaler * (self.entropy_target - entropy).mean()
+                entropy = -(actor_probs * actor_logprobs).sum(dim=-1)
+                entropy_loss = (
+                    self.log_entropy_scaler * (self.entropy_target - entropy).mean()
+                )
                 # entropy = torch.sum(actor_probs * actor_logprobs, dim=-1, keepdim=True)
                 # entropy_loss = (actor_probs * entropy).sum(-1).mean()
             else:
-                entropy_loss = (self.log_entropy_scaler * (actor_logprobs + self.entropy_target)).mean()
+                entropy_loss = (
+                    self.log_entropy_scaler * (actor_logprobs + self.entropy_target)
+                ).mean()
 
             self.entropy_optimizer.zero_grad()
             entropy_loss.backward()

@@ -63,52 +63,62 @@ class SAC_Actor(Base):
         state: torch.Tensor,
         deterministic: bool = False,
     ):
+        state = self.preprocess_state(state)
         if self.is_discrete:
-            logits = self.model(state) #.clamp()
-            # logits = torch.clamp(logits, -20, 20)
-
-            probs = F.softmax(logits, dim=-1)
-            logprobs = F.log_softmax(logits, dim=-1)
-
-            if deterministic:
-                action_idx = torch.argmax(probs, dim=-1)
-            else:
-                dist = Categorical(probs)
-                action_idx = dist.sample()
-
-            action = F.one_hot(action_idx, num_classes=self.action_dim).float()
+            return self.discrete_forward(state, deterministic)
         else:
-            logits = self.backbone(state)
-            mu = self.mu(logits)
-            logstd = self.logstd(logits)
-            logstd = torch.clamp(logstd, -20, 2)  # Prevent extreme stds
-            std = torch.ones_like(mu) * logstd.exp()
+            return self.continuous_forward(state, deterministic)
 
-            dist = Normal(loc=mu, scale=std)
+    def discrete_forward(self, state: torch.Tensor, deterministic: bool = False):
+        logits = self.model(state)  # .clamp()
+        # logits = torch.clamp(logits, -20, 20)
 
-            action = dist.rsample()
+        probs = F.softmax(logits, dim=-1)
+        logprobs = F.log_softmax(logits, dim=-1)
 
-            logprobs = dist.log_prob(action)  # shape: [batch_size, action_dim]
-            logprobs = logprobs.sum(dim=1, keepdim=True)  # sum over action dims
-            probs = torch.exp(logprobs)
+        if deterministic:
+            action_idx = torch.argmax(probs, dim=-1)
+        else:
+            dist = Categorical(probs)
+            action_idx = dist.sample()
 
-            u = dist.rsample()  # Pre-squash action
-            a = torch.tanh(u)  # Squashed action
+        action = F.one_hot(action_idx, num_classes=self.action_dim).float()
 
-            # Compute log π(a|s)
-            log_prob_u = dist.log_prob(u)  # shape: [batch_size, action_dim]
-            log_prob_u = log_prob_u.sum(dim=1, keepdim=True)  # sum over action dims
+        return action, {
+            "probs": probs,
+            "logprobs": logprobs,
+        }
 
-            # Correction for tanh squashing
-            log_det_jacobian = torch.sum(
-                torch.log(1 - a**2 + 1e-6), dim=1, keepdim=True
-            )
+    def continuous_forward(self, state: torch.Tensor, deterministic: bool = False):
+        logits = self.backbone(state)
+        mu = self.mu(logits)
+        logstd = self.logstd(logits)
+        logstd = torch.clamp(logstd, -20, 2)  # Prevent extreme stds
+        std = torch.ones_like(mu) * logstd.exp()
 
-            logprobs = log_prob_u - log_det_jacobian  # final log probability
-            probs = torch.exp(logprobs)
+        dist = Normal(loc=mu, scale=std)
 
-            # Unscale to action space if needed
-            action = self.unscale_action(a)
+        action = dist.rsample()
+
+        logprobs = dist.log_prob(action)  # shape: [batch_size, action_dim]
+        logprobs = logprobs.sum(dim=1, keepdim=True)  # sum over action dims
+        probs = torch.exp(logprobs)
+
+        u = dist.rsample()  # Pre-squash action
+        a = torch.tanh(u)  # Squashed action
+
+        # Compute log π(a|s)
+        log_prob_u = dist.log_prob(u)  # shape: [batch_size, action_dim]
+        log_prob_u = log_prob_u.sum(dim=1, keepdim=True)  # sum over action dims
+
+        # Correction for tanh squashing
+        log_det_jacobian = torch.sum(torch.log(1 - a**2 + 1e-6), dim=1, keepdim=True)
+
+        logprobs = log_prob_u - log_det_jacobian  # final log probability
+        probs = torch.exp(logprobs)
+
+        # Unscale to action space if needed
+        action = self.unscale_action(a)
 
         return action, {
             "probs": probs,
@@ -116,15 +126,16 @@ class SAC_Actor(Base):
         }
 
 
-class SAC_Critic(nn.Module):
+class SAC_Critic(Base):
     def __init__(
         self,
         state_dim: int,
         action_dim: int,
         hidden_dim: list,
         is_discrete: bool,
+        device=torch.device("cpu"),
     ):
-        super().__init__()
+        super().__init__(device=device)  # modify based on Base's signature
 
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -149,6 +160,7 @@ class SAC_Critic(nn.Module):
                 initialization="critic",
             )
 
-    def forward(self, x: torch.Tensor):
-        value = self.model(x)
+    def forward(self, state: torch.Tensor):
+        state = self.preprocess_state(state)
+        value = self.model(state)
         return value

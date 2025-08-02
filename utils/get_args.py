@@ -33,7 +33,7 @@ def get_args(verbose=True):
     parser.add_argument(
         "--fe-extractor-epochs",
         type=int,
-        default=10000,
+        default=100000,
         help="Number of training epochs.",
     )
     parser.add_argument(
@@ -56,7 +56,7 @@ def get_args(verbose=True):
         "--critic-fc-dim", type=list, default=[512, 512], help="Base learning rate."
     )
     parser.add_argument(
-        "--extractor-lr", type=float, default=1e-3, help="Base learning rate."
+        "--extractor-lr", type=float, default=1e-4, help="Base learning rate."
     )
     parser.add_argument(
         "--actor-lr", type=float, default=1e-4, help="Base learning rate."
@@ -109,7 +109,7 @@ def get_args(verbose=True):
     parser.add_argument(
         "--hrl-base-algorithm",
         type=str,
-        default="sac",
+        default="ppo",
         help="Number of samples for training.",
     )
     parser.add_argument(

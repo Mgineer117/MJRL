@@ -7,9 +7,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from extractor.base.mlp import NeuralNet
 from utils.rl import call_env
 from utils.sampler import OnlineSampler
-from extractor.base.mlp import NeuralNet
+
 
 class IntrinsicRewardFunctions(nn.Module):
     def __init__(self, logger, writer, args):
@@ -32,17 +33,21 @@ class IntrinsicRewardFunctions(nn.Module):
         self.num_rewards = self.args.num_options
         self.extractor_mode = "ALLO"
 
-        print(f"[INFO] Using {self.extractor_mode} for intrinsic rewards.")
+        print(f"[INFO] Using {args.extractor_mode} for intrinsic rewards.")
         if args.extractor_mode == "FE":
             self.define_fe_extractor()
+            self.define_fe_eigenvectors()
         elif args.extractor_mode == "ALLO":
             self.define_allo_extractor()
+            self.define_allo_eigenvectors()
         else:
             raise NotImplementedError(
                 f"Extractor mode {args.extractor_mode} is not implemented."
             )
-        print(f"[INFO] {self.extractor_mode} Extractor defined with feature dimension: {self.args.feature_dim}")
-        self.define_eigenvectors()
+        print(
+            f"[INFO] {self.extractor_mode} Extractor defined with feature dimension: {self.args.feature_dim}"
+        )
+
         print(f"[INFO] Eigenvectors defined with {len(self.eigenvectors)} vectors.")
         # normalizer is not good for off-policy learning
         # self.define_intrinsic_reward_normalizer()
@@ -51,8 +56,8 @@ class IntrinsicRewardFunctions(nn.Module):
         self, states: torch.Tensor, next_states: torch.Tensor, i: int
     ) -> torch.Tensor:
         with torch.no_grad():
-            feature = self.extractor(states)
-            next_feature = self.extractor(next_states)
+            feature, _ = self.extractor(states)
+            next_feature, _ = self.extractor(next_states)
             difference = next_feature - feature
 
             eigenvector_sign = self.eigenvector_signs[i]
@@ -77,9 +82,9 @@ class IntrinsicRewardFunctions(nn.Module):
 
     def define_fe_extractor(self):
         from extractor.base.cnn import CNN
-        from utils.cnn_architecture import get_cnn_architecture
         from extractor.extractor import Extractor
         from trainer.extractor_trainer import ExtractorTrainer
+        from utils.cnn_architecture import get_cnn_architecture
 
         if not os.path.exists("model"):
             os.makedirs("model")
@@ -89,12 +94,14 @@ class IntrinsicRewardFunctions(nn.Module):
         # === CREATE FEATURE EXTRACTOR === #
         encoder_architecture, decoder_architecture = get_cnn_architecture(self.args)
 
-        feature_network = CNN(state_dim=self.args.state_dim,
-                              action_dim=self.args.action_dim,
-                              feature_dim=self.args.feature_dim,
-                              encoder_architecture=encoder_architecture,
-                              decoder_architecture=decoder_architecture,
-                              device=self.args.device)
+        feature_network = CNN(
+            state_dim=self.args.state_dim,
+            action_dim=self.args.action_dim,
+            feature_dim=self.args.feature_dim,
+            encoder_architecture=encoder_architecture,
+            decoder_architecture=decoder_architecture,
+            device=self.args.device,
+        )
 
         # === DEFINE LEARNING METHOD FOR EXTRACTOR === #
         extractor = Extractor(
@@ -139,18 +146,13 @@ class IntrinsicRewardFunctions(nn.Module):
                     print(f"[WARNING] Failed to parse file: {filename}")
                     continue
 
-            matching = [
-                (e, filename)
-                for e, filename in zip(epochs, valid_files)
-            ]
+            matching = [(e, filename) for e, filename in zip(epochs, valid_files)]
 
-            max_epoch, _, _ = max(matching, key=lambda x: x[0])
+            max_epoch, _ = max(matching, key=lambda x: x[0])
             idx = epochs.index(max_epoch)
             filename = matching[idx][-1]
             model_path = os.path.join(model_dir, filename)
-            print(
-                f"[INFO] Loading model from: {model_path} (epoch {max_epoch})"
-            )
+            print(f"[INFO] Loading model from: {model_path} (epoch {max_epoch})")
 
             extractor.load_state_dict(
                 torch.load(model_path, map_location=self.args.device)
@@ -293,7 +295,7 @@ class IntrinsicRewardFunctions(nn.Module):
 
         self.extractor = extractor
 
-    def define_eigenvectors(self):
+    def define_allo_eigenvectors(self):
         # === Define eigenvectors === #
         # ALLO does not have explicit eigenvectors.
         # Instead, we make list that contains the eigenvector index and sign
@@ -302,114 +304,116 @@ class IntrinsicRewardFunctions(nn.Module):
                 "[Warning] The num_options should be an even number, otherwise this may result in corrupt eigenvectors."
             )
 
+        # create a onehot_vector of [1, 0, 0,] using self.args.num_option
+        self.eigenvectors = [
+            F.one_hot(torch.tensor(n // 2), num_classes=self.args.feature_dim).float()
+            for n in range(2, self.args.num_options + 2)
+        ]
+
+        for i, eig_vec in enumerate(self.eigenvectors):
+            self.eigenvectors[i] = eig_vec.to(self.args.device)
+        self.eigenvector_signs = [2 * (n % 2) - 1 for n in range(self.args.num_options)]
+
+        if self.args.env_name in ("FourRooms-v0", "Maze-v0", "Maze-v1"):
+            heatmaps = self.extractor_env.get_rewards_heatmap(
+                self.extractor, self.eigenvector_signs, self.eigenvectors
+            )
+            self.logger.write_images(
+                step=self.current_timesteps, images=heatmaps, logdir="Image/Heatmaps"
+            )
+
+    def define_fe_eigenvectors(self):
+        # === Define eigenvectors === #
+        # ALLO does not have explicit eigenvectors.
+        # Instead, we make list that contains the eigenvector index and sign
+        if self.args.num_options % 2 == 1:
+            print(
+                "[Warning] The num_options should be an even number, otherwise this may result in corrupt eigenvectors."
+            )
+
+        # get features
+        if not hasattr(self, "batch"):
+            self.collect_samples()
+        with torch.no_grad():
+            features, _ = self.extractor(self.batch["states"])
+        _, _, Vt = torch.linalg.svd(features, full_matrices=False)
+        Vt = Vt.to(self.args.device)
+
         if self.args.option_method == "top":
             # create a onehot_vector of [1, 0, 0,] using self.args.num_option
             self.eigenvectors = [
-                F.one_hot(
-                    torch.tensor(n // 2), num_classes=self.args.feature_dim
-                ).float()
-                for n in range(2, self.args.num_options + 2)
+                Vt[n // 2, :].to(self.args.device) for n in range(self.args.num_options)
             ]
         elif self.args.option_method == "cvs":
-            if not hasattr(self, "batch"):
-                self.collect_samples()
+            # cluster Vt
+            from sklearn.cluster import KMeans
 
-            states = self.batch["states"]
-            intrinsic_rewards = self.extractor(states)
-            intrinsic_rewards = intrinsic_rewards[:, : self.args.num_options // 2]
-
-            # normalize the intrinsic rewards column-wise
-            # this normalization should be make column vector as a unit vector
-            intrinsic_rewards = F.normalize(intrinsic_rewards, dim=1)
-
-            # perform svd on intrinsic rewards
-            # make sure this operates in CPU
-            # intrinsic_rewards = intrinsic_rewards.cpu().detach().numpy()
-            # _, _, Vt = np.linalg.svd(intrinsic_rewards, full_matrices=False)
-            intrinsic_rewards = intrinsic_rewards.cpu().detach()
-            _, _, Vt = torch.linalg.svd(intrinsic_rewards, full_matrices=False)
-            Vt = Vt.to(self.args.device)
-            # print(Vt.shape)
-            # Vt = torch.from_numpy(Vt).to(self.args.device)
-
+            kmeans = KMeans(n_clusters=self.args.num_options)
+            kmeans.fit(Vt.cpu().detach().numpy())
+            cluster_centers = kmeans.cluster_centers_
             self.eigenvectors = [
-                torch.cat(
-                    [
-                        Vt[n // 2, :],
-                        torch.zeros(
-                            self.args.feature_dim - Vt.shape[1],
-                            device=Vt.device,
-                            dtype=Vt.dtype,
-                        ),
-                    ]
-                )
+                torch.tensor(cluster_centers[n // 2, :]).to(self.args.device)
                 for n in range(self.args.num_options)
             ]
         elif self.args.option_method == "crs":
-            if not hasattr(self, "batch"):
-                self.collect_samples()
+            from sklearn.cluster import KMeans
 
-            states = self.batch["states"]
-            intrinsic_rewards = self.extractor(states)
-            intrinsic_rewards = intrinsic_rewards[:, : self.args.num_options // 2]
+            with torch.no_grad():
+                next_features, _ = self.extractor(self.batch["next_states"])
+            difference = next_features - features
+            intrinsic_rewards = difference @ Vt.T
 
-            # perform svd on intrinsic rewards
-            intrinsic_rewards = intrinsic_rewards.cpu().detach()
-            _, _, Vt = torch.linalg.svd(intrinsic_rewards, full_matrices=False)
-            Vt = Vt.to(self.args.device)
+            kmeans = KMeans(n_clusters=self.args.num_options)
+            kmeans.fit(intrinsic_rewards.cpu().detach().numpy())
+            cluster_centers = kmeans.cluster_centers_
+            cluster_labels = kmeans.labels_
 
-            self.eigenvectors = [
-                torch.cat(
-                    [
-                        Vt[n // 2, :],
-                        torch.zeros(
-                            self.args.feature_dim - Vt.shape[1],
-                            device=Vt.device,
-                            dtype=Vt.dtype,
-                        ),
-                    ]
+            self.eigenvectors = []
+            for n in range(self.args.num_options):
+                self.eigenvectors.append(
+                    torch.mean(Vt[cluster_labels == (n // 2)], axis=0).to(
+                        self.args.device
+                    )
                 )
-                for n in range(self.args.num_options)
-            ]
-
-            # measure the reward diversity
 
         elif self.args.option_method == "trs":
             if not hasattr(self, "batch"):
                 self.collect_samples()
 
-            # Combine top and crs — for example, 25% top and 75% crs
+            # Round down to ensure integer count
             num_top = int(0.25 * self.args.num_options)
             num_crs = self.args.num_options - num_top
 
+            # Optional: Make sure both are even numbers (if required for later logic)
+            if num_top % 2 != 0:
+                num_top -= 1
+                num_crs += 1  # preserve total count
+
+            if num_crs % 2 != 0:
+                num_crs -= 1
+                num_top += 1  # preserve total count
+
             # Top: one-hot
-            top_vectors = [
-                F.one_hot(
-                    torch.tensor(n // 2), num_classes=self.args.feature_dim
-                ).float()
-                for n in range(num_top)
-            ]
+            top_vectors = [Vt[n // 2, :].to(self.args.device) for n in range(num_top)]
 
             # CRS: SVD-based
-            states = self.batch["states"]
-            intrinsic_rewards = self.extractor(states)
-            intrinsic_rewards = intrinsic_rewards[:, : num_crs // 2]
+            with torch.no_grad():
+                next_features, _ = self.extractor(self.batch["next_states"])
+            difference = next_features - features
+            intrinsic_rewards = difference @ Vt.T
 
-            _, _, Vt = torch.linalg.svd(intrinsic_rewards)
+            kmeans = KMeans(n_clusters=num_crs)
+            kmeans.fit(intrinsic_rewards.cpu().detach().numpy())
+            cluster_centers = kmeans.cluster_centers_
+            cluster_labels = kmeans.labels_
 
-            crs_vectors = [
-                torch.cat(
-                    [
-                        Vt[n // 2, :],
-                        torch.zeros(
-                            self.args.feature_dim - Vt.shape[1],
-                            device=Vt.device,
-                            dtype=Vt.dtype,
-                        ),
-                    ]
+            crs_vectors = []
+            for n in range(num_crs):
+                crs_vectors.append(
+                    torch.mean(Vt[cluster_labels == (n // 2)], axis=0).to(
+                        self.args.device
+                    )
                 )
-                for n in range(num_crs)
-            ]
 
             self.eigenvectors = top_vectors + crs_vectors
 

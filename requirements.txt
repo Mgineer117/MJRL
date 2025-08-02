@@ -13,3 +13,5 @@ wandb
 scipy
 pyrender
 scikit-learn
+PyOpenGL
+PyOpenGL_accelerate

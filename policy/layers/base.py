@@ -82,7 +82,7 @@ class Base(nn.Module):
         if state.ndim == 2:  # (B, D) -> vector input
             return state
         elif state.ndim == 4:  # (B, C, H, W) -> image input
-            return state.view(state.size(0), -1)
+            return state.reshape(state.size(0), -1)
         else:
             raise ValueError(
                 f"Unsupported state shape {state.shape}, expected 2D or 4D."

@@ -186,12 +186,14 @@ class HRL_ALLO(nn.Module):
                     self.args.action_dim,
                     hidden_dim=self.args.critic_fc_dim,
                     is_discrete=self.args.is_discrete,
+                    device=self.args.device,
                 )
                 critic2 = SAC_Critic(
                     self.args.state_dim,
                     self.args.action_dim,
                     hidden_dim=self.args.critic_fc_dim,
                     is_discrete=self.args.is_discrete,
+                    device=self.args.device,
                 )
 
                 policy = SAC_Learner(
@@ -302,7 +304,7 @@ class HRL_ALLO(nn.Module):
             )
             # actor is a wrapper that chooses over critic
             actor = TD3_Actor_From_Critic(critic1)
-    
+
             self.hl_policy = DDPG_Learner(
                 actor=actor,
                 critic1=critic1,
@@ -329,12 +331,14 @@ class HRL_ALLO(nn.Module):
                 len(self.policies),
                 hidden_dim=self.args.critic_fc_dim,
                 is_discrete=True,
+                device=self.args.device,
             )
             critic2 = SAC_Critic(
                 self.args.state_dim,
                 len(self.policies),
                 hidden_dim=self.args.critic_fc_dim,
                 is_discrete=True,
+                device=self.args.device,
             )
 
             self.hl_policy = HRL_SAC_Learner(

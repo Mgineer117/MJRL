@@ -149,12 +149,12 @@ class CtfMvNEnv(MultiGridEnv):
                     [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
                     [6, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 6],
                     [6, 1, 1, 3, 1, 1, 0, 0, 0, 0, 0, 6],
-                    [6, 1, 1, 1, 1, 6, 6, 0, 0, 0, 0, 6],
-                    [6, 1, 1, 1, 1, 6, 6, 0, 0, 0, 0, 6],
+                    [6, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 6],
+                    [6, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 6],
                     [6, 1, 1, 1, 1, 6, 6, 0, 0, 2, 4, 6],
                     [6, 1, 1, 1, 1, 6, 6, 0, 0, 0, 0, 6],
-                    [6, 1, 5, 1, 1, 6, 6, 0, 0, 0, 0, 6],
-                    [6, 1, 1, 1, 1, 6, 6, 0, 0, 0, 0, 6],
+                    [6, 1, 5, 1, 1, 1, 0, 0, 0, 0, 0, 6],
+                    [6, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 6],
                     [6, 1, 1, 3, 1, 1, 0, 0, 0, 0, 0, 6],
                     [6, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 6],
                     [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
@@ -453,7 +453,9 @@ class CtfMvNEnv(MultiGridEnv):
                     # + self.num_blue_agents
                     # + self.num_red_agents
                 )
-                obs_high = np.ones((obs_size,), dtype=np.float32) * np.maximum(self.width, self.height)
+                obs_high = np.ones((obs_size,), dtype=np.float32) * np.maximum(
+                    self.width, self.height
+                )
                 # obs_high[-(self.num_blue_agents + self.num_red_agents) :] = 1
                 observation_space = spaces.Box(
                     low=np.zeros([obs_size], dtype=np.float32),
@@ -544,6 +546,13 @@ class CtfMvNEnv(MultiGridEnv):
                     low=0,
                     high=4,
                     shape=(self._field_map.shape[0], self._field_map.shape[1], 3),
+                    dtype=np.int64,
+                )
+            case "tensor2":
+                observation_space = spaces.Box(
+                    low=0,
+                    high=6,
+                    shape=(self._field_map.shape[0], self._field_map.shape[1], 1),
                     dtype=np.int64,
                 )
 
@@ -803,6 +812,56 @@ class CtfMvNEnv(MultiGridEnv):
                     axis=2,
                 )
 
+            case "tensor2":
+                object_layer: NDArray[np.int_] = np.zeros(
+                    self._field_map.shape, dtype=np.int_
+                )
+
+                for i, j in self.blue_territory:
+                    object_layer[i, j] = 1
+
+                for i, j in self.red_territory:
+                    object_layer[i, j] = 2
+
+                for i, j in self.obstacle:
+                    object_layer[i, j] = 0
+
+                blue_agent_count: int = 0
+                red_agent_count: int = 0
+                for agent in self.agents[0 : self.num_blue_agents]:
+                    assert agent.pos is not None
+                    if agent.terminated:
+                        object_layer[agent.pos[0], agent.pos[1]] = 0
+                    else:
+                        object_layer[agent.pos[0], agent.pos[1]] = 5
+
+                    blue_agent_count += 1
+
+                for agent in self.agents[self.num_blue_agents :]:
+                    assert agent.pos is not None
+                    if agent.terminated:
+                        object_layer[agent.pos[0], agent.pos[1]] = 0
+                    else:
+                        object_layer[agent.pos[0], agent.pos[1]] = 6
+
+                    red_agent_count += 1
+
+                if blue_agent_count != self.num_blue_agents:
+                    raise ValueError(
+                        f"Number of blue agents in the grid ({blue_agent_count}) is not equal to the number of blue agents ({self.num_blue_agents}) at step {self.step_count}."
+                    )
+                elif red_agent_count != self.num_red_agents:
+                    raise ValueError(
+                        f"Number of red agents in the grid ({red_agent_count}) is not equal to the number of red agents ({self.num_red_agents}) at step {self.step_count}."
+                    )
+                else:
+                    pass
+
+                # Flags
+                object_layer[self.blue_flag[0], self.blue_flag[1]] = 3
+                object_layer[self.red_flag[0], self.red_flag[1]] = 4
+
+                observation = object_layer[:, :, np.newaxis]
             case _:
                 raise ValueError(
                     f"Invalid observation_option: {self.observation_option}"
@@ -1006,7 +1065,8 @@ class CtfMvNEnv(MultiGridEnv):
     ) -> tuple[Observation, float, bool, bool, dict[str, float]]:
         self.step_count += 1
 
-        blue_actions: NDArray[np.int_] = np.argmax(blue_actions).flatten()
+        # blue_actions: NDArray[np.int_] = np.argmax(blue_actions).flatten()
+        blue_actions = blue_actions.flatten()
 
         red_actions: list[int] = []
         for red_agent in self.agents[self.num_blue_agents :]:
@@ -1167,10 +1227,10 @@ class CtF(CtfMvNEnv):
         battle_range: float = 1,
         territory_adv_rate: float = 1.0,
         flag_reward: float = 1,
-        battle_reward_ratio: float = 0.5,
+        battle_reward_ratio: float = 0.25,
         obstacle_penalty_ratio: float = 0,
-        step_penalty_ratio: float = 0.01,
-        observation_option: ObservationOption = "tensor",
+        step_penalty_ratio: float = 0.005,
+        observation_option: ObservationOption = "tensor2",
         observation_scaling: float = 1,
         render_mode: Literal["human", "rgb_array"] = "rgb_array",
         uncached_object_types: list[str] = ["red_agent", "blue_agent"],

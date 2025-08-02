@@ -74,7 +74,7 @@ class CNN(nn.Module):
         )
 
         self.encoder = nn.Sequential(
-            *self.encoder_architecture, nn.Flatten(), self.encoder_fc, nn.Sigmoid()
+            *self.encoder_architecture, nn.Flatten(), self.encoder_fc, nn.Tanh()
         )
 
         ### Decoding module
