@@ -1,5 +1,5 @@
 {
-    "onpolicy_timesteps": 1e7,
+    "onpolicy_timesteps": 2e6,
     "offpolicy_timesteps": 1e6,
     "state_mask": [0, 1]
 }
